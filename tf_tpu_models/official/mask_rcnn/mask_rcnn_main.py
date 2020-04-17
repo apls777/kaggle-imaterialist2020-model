@@ -22,14 +22,14 @@ from absl import flags
 from absl import logging
 import tensorflow.compat.v1 as tf
 
-from ...hyperparameters import common_hparams_flags
-from ...hyperparameters import common_tpu_flags
-from ...hyperparameters import flags_to_params
-from ...hyperparameters import params_dict
-from . import dataloader
-from . import distributed_executer
-from . import mask_rcnn_model
-from .configs import mask_rcnn_config
+from tf_tpu_models.hyperparameters import common_hparams_flags
+from tf_tpu_models.hyperparameters import common_tpu_flags
+from tf_tpu_models.hyperparameters import flags_to_params
+from tf_tpu_models.hyperparameters import params_dict
+from tf_tpu_models.official.mask_rcnn import dataloader
+from tf_tpu_models.official.mask_rcnn import distributed_executer
+from tf_tpu_models.official.mask_rcnn import mask_rcnn_model
+from tf_tpu_models.official.mask_rcnn.configs import mask_rcnn_config
 
 common_tpu_flags.define_common_tpu_flags()
 common_hparams_flags.define_common_hparams_flags()
@@ -150,7 +150,7 @@ def main(argv):
         params.validation_file_pattern,
         mode=tf.estimator.ModeKeys.PREDICT,
         num_examples=params.eval_samples,
-        use_instance_mask=params.include_mask)
+        use_instance_mask=params.include_mask_for_eval)
 
   run_executer(params, train_input_fn, eval_input_fn)
 

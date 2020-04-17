@@ -226,12 +226,12 @@ class DistributedExecuter(object):
       logging.info('Start evaluation cycle %d.', cycle)
       eval_results, predictions = evaluation.evaluate(
           eval_estimator, eval_input_fn, self._model_params.eval_samples,
-          self._model_params.eval_batch_size, self._model_params.include_mask,
+          self._model_params.eval_batch_size, self._model_params.include_mask_for_eval,
           self._model_params.val_json_file)
 
-      current_step = int(cycle * self._model_params.num_steps_per_eval)
-      self._write_summary(summary_writer, eval_results, predictions,
-                          current_step)
+      checkpoint_path = tf.train.latest_checkpoint(self._flags.model_dir)
+      checkpoint_step = int(os.path.basename(checkpoint_path).split('-')[1])
+      self._write_summary(summary_writer, eval_results, predictions, checkpoint_step)
 
     logging.info('Starting training cycle %d.', num_cycles)
     train_estimator.train(

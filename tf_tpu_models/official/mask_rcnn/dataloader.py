@@ -32,40 +32,63 @@ MAX_NUM_INSTANCES = 100
 MAX_NUM_VERTICES_PER_INSTANCE = 1500
 MAX_NUM_POLYGON_LIST_LEN = 2 * MAX_NUM_VERTICES_PER_INSTANCE * MAX_NUM_INSTANCES
 POLYGON_PAD_VALUE = coco_utils.POLYGON_PAD_VALUE
+EVAL_IMAGE_SIZE = 512
 
 
 def _prepare_labels_for_eval(data,
+                             training_image_scale,
                              target_num_instances=MAX_NUM_INSTANCES,
-                             target_polygon_list_len=MAX_NUM_POLYGON_LIST_LEN,
-                             use_instance_mask=False):
+                             use_instance_mask=False,
+                             gt_mask_size=112):
   """Create labels dict for infeed from data of tf.Example."""
+
   image = data['image']
-  height = tf.shape(image)[0]
-  width = tf.shape(image)[1]
+  image_height = tf.cast(tf.shape(image)[0], tf.float32)
+  image_width = tf.cast(tf.shape(image)[1], tf.float32)
+  scale = tf.maximum(image_height, image_width) / tf.cast(EVAL_IMAGE_SIZE, tf.float32)
+  eval_height = tf.cast(image_height / scale, tf.int32)
+  eval_width = tf.cast(image_width / scale, tf.int32)
+  eval_scale = training_image_scale / scale
+
   boxes = data['groundtruth_boxes']
   classes = data['groundtruth_classes']
   classes = tf.cast(classes, dtype=tf.float32)
   num_labels = tf.shape(classes)[0]
   boxes = preprocess_ops.pad_to_fixed_size(boxes, -1, [target_num_instances, 4])
-  classes = preprocess_ops.pad_to_fixed_size(classes, -1,
-                                             [target_num_instances, 1])
+  classes = preprocess_ops.pad_to_fixed_size(classes, -1, [target_num_instances, 1])
   is_crowd = data['groundtruth_is_crowd']
   is_crowd = tf.cast(is_crowd, dtype=tf.float32)
-  is_crowd = preprocess_ops.pad_to_fixed_size(is_crowd, 0,
-                                              [target_num_instances, 1])
+  is_crowd = preprocess_ops.pad_to_fixed_size(is_crowd, 0, [target_num_instances, 1])
+
   labels = {}
-  labels['width'] = width
-  labels['height'] = height
+  labels['eval_width'] = eval_width
+  labels['eval_height'] = eval_height
+  labels['eval_scale'] = eval_scale
   labels['groundtruth_boxes'] = boxes
   labels['groundtruth_classes'] = classes
   labels['num_groundtruth_labels'] = num_labels
   labels['groundtruth_is_crowd'] = is_crowd
 
   if use_instance_mask:
-    polygons = data['groundtruth_polygons']
-    polygons = preprocess_ops.pad_to_fixed_size(polygons, POLYGON_PAD_VALUE,
-                                                [target_polygon_list_len, 1])
-    labels['groundtruth_polygons'] = polygons
+    cropped_gt_masks = tf.image.crop_and_resize(
+        image=tf.expand_dims(data['groundtruth_instance_masks'], axis=-1),
+        boxes=data['groundtruth_boxes'],
+        box_indices=tf.range(tf.shape(data['groundtruth_boxes'])[0], dtype=tf.int32),
+        crop_size=[gt_mask_size, gt_mask_size],
+        method='bilinear',
+    )
+    cropped_gt_masks = tf.squeeze(cropped_gt_masks, axis=-1)
+
+    # Pads cropped_gt_masks.
+    cropped_gt_masks = tf.reshape(cropped_gt_masks, tf.stack([tf.shape(cropped_gt_masks)[0], -1]))
+    cropped_gt_masks = preprocess_ops.pad_to_fixed_size(cropped_gt_masks, -1, [target_num_instances, gt_mask_size ** 2])
+    cropped_gt_masks = tf.reshape(cropped_gt_masks, [target_num_instances, gt_mask_size, gt_mask_size])
+
+    # reduce size of masks by converting them to boolean type
+    cropped_gt_masks = tf.greater(cropped_gt_masks, .5)
+
+    labels['groundtruth_cropped_masks'] = cropped_gt_masks
+
     if 'groundtruth_area' in data:
       groundtruth_area = data['groundtruth_area']
       groundtruth_area = preprocess_ops.pad_to_fixed_size(
@@ -85,7 +108,8 @@ class InputReader(object):
                use_fake_data=False,
                use_instance_mask=False,
                max_num_instances=MAX_NUM_INSTANCES,
-               max_num_polygon_list_len=MAX_NUM_POLYGON_LIST_LEN):
+               max_num_polygon_list_len=MAX_NUM_POLYGON_LIST_LEN,
+               num_attributes=None):
     self._file_pattern = file_pattern
     self._max_num_instances = max_num_instances
     self._max_num_polygon_list_len = max_num_polygon_list_len
@@ -93,6 +117,7 @@ class InputReader(object):
     self._num_examples = num_examples
     self._use_fake_data = use_fake_data
     self._use_instance_mask = use_instance_mask
+    self._num_attributes = num_attributes
 
   def _create_dataset_fn(self):
     # Prefetch data from files.
@@ -104,7 +129,9 @@ class InputReader(object):
 
   def _create_example_decoder(self):
     return tf_example_decoder.TfExampleDecoder(
-        use_instance_mask=self._use_instance_mask)
+        use_instance_mask=self._use_instance_mask,
+        num_attributes=self._num_attributes,
+    )
 
   def _create_dataset_parser_fn(self, params):
     """Create parser for parsing input data (dictionary)."""
@@ -187,9 +214,10 @@ class InputReader(object):
               self._mode == tf.estimator.ModeKeys.EVAL):
             labels = _prepare_labels_for_eval(
                 data,
+                image_info[2],
                 target_num_instances=self._max_num_instances,
-                target_polygon_list_len=self._max_num_polygon_list_len,
-                use_instance_mask=params['include_mask'])
+                use_instance_mask=params['include_mask'],
+                gt_mask_size=params['gt_mask_size'])
             return {'features': features, 'labels': labels}
           else:
             return {'features': features}

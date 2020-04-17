@@ -1,0 +1,127 @@
+project:
+  name: imaterialist2020
+  syncFilters:
+    - exclude:
+        - .git/*
+        - .idea/*
+        - '*/__pycache__/*'
+
+container:
+  projectDir: /workspace/project
+  image: tensorflow/tensorflow:1.15.2-gpu-py3-jupyter
+  ports: [6006, 6007, 8888]
+  volumeMounts:
+    - name: project
+      mountPath: /workspace/project
+    - name: data
+      mountPath: /workspace/data
+  commands: |
+    apt update && apt install -y git vim zip htop
+    pip install -r requiremets-spotty.txt
+
+instances:
+#  - name: gcp-i1
+#    provider: gcp
+#    parameters:
+#      zone: europe-west4-a
+##      machineType: n1-highmem-2
+#      machineType: n1-standard-16
+#      onDemandInstance: true
+#      bootDiskSize: 20
+#      volumes:
+#        - name: data
+#          parameters:
+#            size: 300
+#            deletionPolicy: retain
+
+  - name: gcp-i2
+    provider: gcp
+    parameters:
+      zone: europe-west4-a
+      machineType: n1-highmem-4
+#      machineType: n1-standard-2
+      onDemandInstance: true
+      bootDiskSize: 30
+
+scripts:
+  tensorboard: |
+    tensorboard --logdir gs://kaggle-imaterialist2020-data-europe-west4/training/{{MODEL}}
+
+  jupyter: |
+    CUDA_VISIBLE_DEVICES="" jupyter notebook --allow-root --ip 0.0.0.0 --notebook-dir=/workspace/project
+
+  train-mrcnn: |
+    if [ -n "{{MODEL}}" ] && [ -n "{{CONFIG}}" ] && [ -n "{{TPU}}" ] && [ -n "{{MODE}}" ]; then
+      export TPU_NAME={{TPU}}
+      export ACCELERATOR_TYPE=v3-8
+      export STORAGE_BUCKET=gs://kaggle-imaterialist2020-data-europe-west4
+      export DATA_DIR=${STORAGE_BUCKET}/datasets/imaterialist2020
+      export MODEL_DIR=${STORAGE_BUCKET}/training/{{MODEL}}
+      export CONFIG_PATH=configs/mask_rcnn/{{CONFIG}}.yaml
+      # export CHECKPOINT=gs://cloud-tpu-artifacts/resnet/resnet-nhwc-2018-10-14/model.ckpt-112602
+      export CHECKPOINT=gs://kaggle-imaterialist2020-data-europe-west4/training/200408-mask-rcnn-test1/model.ckpt-22500
+      export TRAIN_FILE_PATTERN=${DATA_DIR}/tfrecords/train-*
+      export EVAL_FILE_PATTERN=${DATA_DIR}/tfrecords/valid-*
+      # export VAL_JSON_FILE=${DATA_DIR}/split/valid_coco.json
+
+      # train_and_eval
+      PYTHONPATH=. python tf_tpu_models/official/mask_rcnn/mask_rcnn_main.py \
+      --use_tpu=True \
+      --tpu=${TPU_NAME} \
+      --model_dir=${MODEL_DIR} \
+      --num_cores=8 \
+      --mode="{{MODE}}" \
+      --config_file=${CONFIG_PATH} \
+      --params_override="warm_start_path=${CHECKPOINT}, training_file_pattern=${TRAIN_FILE_PATTERN}, validation_file_pattern=${EVAL_FILE_PATTERN}, include_groundtruth_in_features=True"
+    else
+      echo "MODEL, CONFIG, TPU and MODE parameters are required."
+    fi
+
+  eval-coco: |
+    if [ -n "{{MODEL}}" ] && [ -n "{{CONFIG}}" ] && [ -n "{{TPU}}" ]; then
+      export TPU_NAME={{TPU}}
+      export ACCELERATOR_TYPE=v3-8
+      export STORAGE_BUCKET=gs://kaggle-imaterialist2020-data-europe-west4
+      export DATA_DIR=${STORAGE_BUCKET}/datasets/coco
+      export MODEL_DIR=${STORAGE_BUCKET}/training/{{MODEL}}
+      export CONFIG_PATH=configs/mask_rcnn/{{CONFIG}}.yaml
+      # export CHECKPOINT=gs://cloud-tpu-artifacts/resnet/resnet-nhwc-2018-10-14/model.ckpt-112602
+      # export CHECKPOINT=gs://kaggle-imaterialist2020-data-europe-west4/training/200408-mask-rcnn-test1/model.ckpt-22500
+      export TRAIN_FILE_PATTERN=${DATA_DIR}/train-*
+      export EVAL_FILE_PATTERN=${DATA_DIR}/val-*
+      export VAL_JSON_FILE=${DATA_DIR}/instances_val2017.json
+
+      # train_and_eval
+      PYTHONPATH=. python tf_tpu_models/official/mask_rcnn/mask_rcnn_main.py \
+      --use_tpu=True \
+      --tpu=${TPU_NAME} \
+      --model_dir=${MODEL_DIR} \
+      --num_cores=8 \
+      --mode="eval" \
+      --config_file=${CONFIG_PATH} \
+      --params_override="training_file_pattern=${TRAIN_FILE_PATTERN}, validation_file_pattern=${EVAL_FILE_PATTERN}, include_groundtruth_in_features=True"
+    else
+      echo "MODEL, CONFIG and TPU parameters are required."
+    fi
+
+  create-tfrecords: |
+    apt update && apt install -y protobuf-compiler python3-pil python3-lxml python3-pip python3-dev git unzip
+
+    pip install Cython
+    pip install git+https://github.com/cocodataset/cocoapi#subdirectory=PythonAPI
+
+    if [ ! -e tf-models ]; then
+      git clone https://github.com/tensorflow/models.git tf-models
+      touch tf-models/__init__.py
+      touch tf-models/research/__init__.py
+    fi
+
+    (cd tf-models/research && protoc object_detection/protos/*.proto --python_out=.)
+
+    PYTHONPATH="tf-models:tf-models/research" python tools/datasets/create_coco_tf_record.py \
+        --logtostderr \
+        --include_masks \
+        --image_dir="/workspace/data/imaterialist-fashion-2020-fgvc7/train" \
+        --object_annotations_file="/workspace/data/imaterialist-fashion-2020-fgvc7/split/valid_coco.json" \
+        --output_file_prefix="/workspace/data/imaterialist-fashion-2020-fgvc7/tfrecords/valid" \
+        --num_shards=50

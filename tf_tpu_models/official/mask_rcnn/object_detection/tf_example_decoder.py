@@ -30,9 +30,10 @@ def _get_source_id_from_encoded_image(parsed_tensors):
 class TfExampleDecoder(object):
   """Tensorflow Example proto decoder."""
 
-  def __init__(self, use_instance_mask=False, regenerate_source_id=False):
+  def __init__(self, use_instance_mask=False, regenerate_source_id=False, num_attributes=None):
     self._use_instance_mask = use_instance_mask
     self._regenerate_source_id = regenerate_source_id
+    self._num_attributes = num_attributes
     self._keys_to_features = {
         'image/encoded': tf.FixedLenFeature((), tf.string),
         'image/source_id': tf.FixedLenFeature((), tf.string, ''),
@@ -45,15 +46,21 @@ class TfExampleDecoder(object):
         'image/object/class/label': tf.VarLenFeature(tf.int64),
         'image/object/area': tf.VarLenFeature(tf.float32),
         'image/object/is_crowd': tf.VarLenFeature(tf.int64),
-        'image/object/polygon': tf.VarLenFeature(tf.float32),
-        'image/object/attribute/label': tf.VarLenFeature(tf.int64),
+        # 'image/object/polygon': tf.VarLenFeature(tf.float32),
+        'image/object/attributes/labels': tf.FixedLenFeature((), tf.string, ''),
         'image/object/difficult': tf.VarLenFeature(tf.int64),
         'image/object/group_of': tf.VarLenFeature(tf.int64),
     }
+
     if use_instance_mask:
       self._keys_to_features.update({
           'image/object/mask':
               tf.VarLenFeature(tf.string),
+      })
+
+    if num_attributes:
+      self._keys_to_features.update({
+        'image/object/attributes/labels': tf.FixedLenFeature((), tf.string, ''),
       })
 
   def _decode_image(self, parsed_tensors):
@@ -113,7 +120,7 @@ class TfExampleDecoder(object):
         - groundtruth_is_crowd: a bool tensor of shape [None].
         - groundtruth_area: a float32 tensor of shape [None].
         - groundtruth_boxes: a float32 tensor of shape [None, 4].
-        - groundtruth_attributes - 1D int64 tensor of shape [None].
+        - groundtruth_attributes - 2D int32 tensor of shape [None, num_attributes].
 
       Optional:
         - groundtruth_difficult - 1D bool tensor of shape
@@ -145,6 +152,7 @@ class TfExampleDecoder(object):
           tf.greater(tf.strings.length(parsed_tensors['image/source_id']),
                      0), lambda: parsed_tensors['image/source_id'],
           lambda: _get_source_id_from_encoded_image(parsed_tensors))
+
     if self._use_instance_mask:
       masks = self._decode_masks(parsed_tensors)
 
@@ -158,16 +166,22 @@ class TfExampleDecoder(object):
                                         dtype=tf.bool),
         'groundtruth_area': areas,
         'groundtruth_boxes': boxes,
-        'groundtruth_attributes': parsed_tensors[
-            'image/object/attribute/label'],
     }
     if self._use_instance_mask:
       decoded_tensors.update({
           'groundtruth_instance_masks': masks,
-          'groundtruth_polygons': parsed_tensors['image/object/polygon'],
           'groundtruth_difficult':
               parsed_tensors['image/object/difficult'],
           'groundtruth_group_of':
               parsed_tensors['image/object/group_of'],
       })
+
+    if self._num_attributes:
+        decoded_tensors.update({
+            'groundtruth_attributes': tf.reshape(
+                tf.cast(tf.io.decode_raw(parsed_tensors['image/object/attributes/labels'], tf.bool), tf.int32),
+                shape=(-1, self._num_attributes),
+            ),
+        })
+
     return decoded_tensors

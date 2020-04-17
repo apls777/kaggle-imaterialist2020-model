@@ -86,7 +86,9 @@ class MaskCOCO(COCO):
         detection_results,
         include_mask=include_mask,
         is_image_mask=is_image_mask)
+
     assert isinstance(predictions, list), 'results in not an array of objects'
+
     if predictions:
       image_ids = [pred['image_id'] for pred in predictions]
       assert set(image_ids) == (set(image_ids) & set(self.getImgIds())), \
@@ -134,17 +136,21 @@ class MaskCOCO(COCO):
         in numpy form.
     """
     predictions = []
-    num_detections = detection_results['detection_scores'].size
-    current_index = 0
     for i, image_id in enumerate(detection_results['source_id']):
+      if (i + 1) % 100 == 0:
+        print('  loading image %d/%d...' % (i + 1, len(detection_results['source_id'])))
 
       if include_mask:
         box_coorindates_in_image = detection_results['detection_boxes'][i]
+        image_height = detection_results['eval_height'][i] if 'eval_height' in detection_results \
+          else detection_results['image_info'][i][3]
+        image_width = detection_results['eval_width'][i] if 'eval_width' in detection_results \
+          else detection_results['image_info'][i][4]
         segments = generate_segmentation_from_masks(
             detection_results['detection_masks'][i],
             box_coorindates_in_image,
-            int(detection_results['image_info'][i][3]),
-            int(detection_results['image_info'][i][4]),
+            int(image_height),
+            int(image_width),
             is_image_mask=is_image_mask)
 
         # Convert the mask to uint8 and then to fortranarray for RLE encoder.
@@ -154,9 +160,6 @@ class MaskCOCO(COCO):
         ]
 
       for box_index in range(int(detection_results['num_detections'][i])):
-        if current_index % 1000000 == 0:
-          print('{}/{}'.format(current_index, num_detections))
-        current_index += 1
 
         prediction = {
             'image_id': int(image_id),

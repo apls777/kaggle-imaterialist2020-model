@@ -37,7 +37,8 @@ def process_prediction_for_eval(prediction):
   processed_box_coordinates = np.zeros_like(box_coordinates)
 
   for image_id in range(box_coordinates.shape[0]):
-    scale = image_info[image_id][2]
+    # if evaluation uses an annotation file, it always will be done on the original image
+    scale = prediction['eval_scale'][image_id] if 'eval_scale' in prediction else image_info[image_id][2]
     for box_id in range(box_coordinates.shape[1]):
       # Map [y1, x1, y2, x2] -> [x1, y1, w, h] and multiply detections
       # by image scale.
@@ -109,7 +110,9 @@ def compute_coco_eval_metric(predictor,
         filename=None, include_mask=include_mask)
     eval_results = eval_metric.predict_metric_fn(
         predictions, groundtruth_data=dataset)
+
   logging.info('Eval results: %s', eval_results)
+
   return eval_results, predictions
 
 

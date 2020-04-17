@@ -34,6 +34,7 @@ import json
 import logging
 import multiprocessing
 import os
+from typing import List
 from absl import app
 from absl import flags
 import numpy as np
@@ -73,7 +74,8 @@ def create_tf_example(image,
                       bbox_annotations=None,
                       category_index=None,
                       caption_annotations=None,
-                      include_masks=False):
+                      include_masks=False,
+                      num_attributes=None):
   """Converts image and annotations to a tf.Example proto.
 
   Args:
@@ -114,6 +116,10 @@ def create_tf_example(image,
     encoded_jpg = fid.read()
   encoded_jpg_io = io.BytesIO(encoded_jpg)
   image = PIL.Image.open(encoded_jpg_io)
+
+  assert image_width == image.width
+  assert image_height == image.height
+
   key = hashlib.sha256(encoded_jpg).hexdigest()
   feature_dict = {
       'image/height':
@@ -141,9 +147,10 @@ def create_tf_example(image,
     is_crowd = []
     category_names = []
     category_ids = []
+    attributes_multi_hot = np.zeros((len(bbox_annotations), num_attributes), dtype=np.bool) if num_attributes else None
     area = []
     encoded_mask_png = []
-    for object_annotations in bbox_annotations:
+    for i, object_annotations in enumerate(bbox_annotations):
       (x, y, width, height) = tuple(object_annotations['bbox'])
       if width <= 0 or height <= 0:
         num_annotations_skipped += 1
@@ -162,15 +169,23 @@ def create_tf_example(image,
       area.append(object_annotations['area'])
 
       if include_masks:
-        run_len_encoding = mask.frPyObjects(object_annotations['segmentation'],
-                                            image_height, image_width)
-        binary_mask = mask.decode(run_len_encoding)
-        if not object_annotations['iscrowd']:
-          binary_mask = np.amax(binary_mask, axis=2)
+        if isinstance(object_annotations['segmentation'], list) \
+                and isinstance(object_annotations['segmentation'][0], int):
+          binary_mask = _get_binary_mask(object_annotations['segmentation'], image_height, image_width)
+        else:
+          run_len_encoding = mask.frPyObjects(object_annotations['segmentation'], image_height, image_width)
+          binary_mask = mask.decode(run_len_encoding)
+          if not object_annotations['iscrowd'] and (len(binary_mask.shape) > 2):
+            binary_mask = np.amax(binary_mask, axis=2)
+
         pil_image = PIL.Image.fromarray(binary_mask)
         output_io = io.BytesIO()
         pil_image.save(output_io, format='PNG')
         encoded_mask_png.append(output_io.getvalue())
+
+      if num_attributes:
+        attributes_multi_hot[i, object_annotations['attribute_ids']] = 1
+
     feature_dict.update({
         'image/object/bbox/xmin':
             dataset_util.float_list_feature(xmin),
@@ -184,6 +199,8 @@ def create_tf_example(image,
             dataset_util.bytes_list_feature(category_names),
         'image/object/class/label':
             dataset_util.int64_list_feature(category_ids),
+        'image/object/attributes/labels':
+            dataset_util.bytes_feature(attributes_multi_hot.tobytes()),
         'image/object/is_crowd':
             dataset_util.int64_list_feature(is_crowd),
         'image/object/area':
@@ -212,6 +229,8 @@ def _load_object_annotations(object_annotations_file):
   with tf.gfile.GFile(object_annotations_file, 'r') as fid:
     obj_annotations = json.load(fid)
 
+  num_attributes = obj_annotations['info'].get('num_attributes')
+
   images = obj_annotations['images']
   category_index = label_map_util.create_category_index(
       obj_annotations['categories'])
@@ -230,7 +249,7 @@ def _load_object_annotations(object_annotations_file):
 
   logging.info('%d images are missing bboxes.', missing_annotation_count)
 
-  return img_to_obj_annotation, category_index
+  return img_to_obj_annotation, category_index, num_attributes
 
 
 def _load_caption_annotations(caption_annotations_file):
@@ -298,8 +317,9 @@ def _create_tf_record_from_coco_annotations(images_info_file,
   img_to_obj_annotation = None
   img_to_caption_annotation = None
   category_index = None
+  num_attributes = None
   if object_annotations_file:
-    img_to_obj_annotation, category_index = (
+    img_to_obj_annotation, category_index, num_attributes = (
         _load_object_annotations(object_annotations_file))
   if caption_annotations_file:
     img_to_caption_annotation = (
@@ -323,7 +343,7 @@ def _create_tf_record_from_coco_annotations(images_info_file,
       pool.imap(_pool_create_tf_example,
                 [(image, image_dir, _get_object_annotation(image['id']),
                   category_index, _get_caption_annotation(image['id']),
-                  include_masks) for image in images])):
+                  include_masks, num_attributes) for image in images])):
     if idx % 100 == 0:
       logging.info('On image %d of %d', idx, len(images))
 
@@ -338,6 +358,18 @@ def _create_tf_record_from_coco_annotations(images_info_file,
 
   logging.info('Finished writing, skipped %d annotations.',
                total_num_annotations_skipped)
+
+
+def _get_binary_mask(encoded_pixels: List[int], height: int, width: int):
+    """Converts RLE to a binary mask."""
+    mask = np.zeros(height * width, dtype=np.uint8)
+    for start_pixel, num_pixels in zip(encoded_pixels[::2], encoded_pixels[1::2]):
+        start_pixel -= 1
+        mask[start_pixel:start_pixel + num_pixels] = 1
+
+    mask = mask.reshape((height, width), order='F')
+
+    return mask
 
 
 def main(_):

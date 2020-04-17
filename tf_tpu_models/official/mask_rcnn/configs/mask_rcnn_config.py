@@ -31,6 +31,7 @@ MASK_RCNN_CFG = {
     'gt_mask_size': 112,
     # dataset specific parameters
     'num_classes': 91,
+    'num_attributes': None,
     'skip_crowd_during_training': True,
     'use_category': True,
     # Region Proposal Network
@@ -57,6 +58,7 @@ MASK_RCNN_CFG = {
     'bbox_reg_weights': [10., 10., 5., 5.],
     # Mask-RCNN heads.
     'include_mask': True,  # whether or not to include mask branch.
+    'include_mask_for_eval': True,
     'mrcnn_resolution': 28,
     # evaluation
     'test_detections_per_image': 100,
