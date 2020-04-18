@@ -167,6 +167,7 @@ class DistributedExecuter(object):
                    'no checkpoints', self._flags.eval_timeout)
       return True
 
+    skip_checkpoint = self._flags.eval_wait_next_checkpoint
     eval_results = None
     # Run evaluation when there's a new checkpoint
     for ckpt in tf.train.checkpoints_iterator(
@@ -177,14 +178,22 @@ class DistributedExecuter(object):
       # Terminate eval job when final checkpoint is reached
       current_step = int(os.path.basename(ckpt).split('-')[1])
 
+      if skip_checkpoint:
+        logging.info('Skipping the latest checkpoint (step #%d).' % current_step)
+        skip_checkpoint = False
+        continue
+
       logging.info('Starting to evaluate.')
       try:
         eval_results, predictions = evaluation.evaluate(
             eval_estimator, eval_input_fn, self._model_params.eval_samples,
             self._model_params.eval_batch_size, self._model_params.include_mask,
             self._model_params.val_json_file)
-        self._write_summary(summary_writer, eval_results, predictions,
-                            current_step)
+
+        self._write_summary(summary_writer, eval_results, predictions, current_step)
+
+        del eval_results
+        del predictions
 
         if current_step >= self._model_params.total_steps:
           logging.info('Evaluation finished after training step %d',

@@ -84,6 +84,9 @@ flags.DEFINE_integer('min_eval_interval', 180,
 flags.DEFINE_integer(
     'eval_timeout', None,
     'Maximum seconds between checkpoints before evaluation terminates.')
+flags.DEFINE_bool(
+    'eval_wait_next_checkpoint', False,
+    'Skips the latest checkpoint and waits for the next one for evaluation.')
 
 
 FLAGS = flags.FLAGS
