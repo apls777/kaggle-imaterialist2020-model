@@ -252,6 +252,7 @@ def build_model_graph(features, labels, is_training, params):
       generate_detections_fn = postprocess_ops.generate_detections_gpu
     else:
       generate_detections_fn = postprocess_ops.generate_detections_tpu
+
     detections = generate_detections_fn(
         class_outputs,
         box_outputs,
@@ -320,9 +321,6 @@ def build_model_graph(features, labels, is_training, params):
       mrcnn_resolution=params['mrcnn_resolution'],
       is_gpu_inference=is_gpu_inference)
 
-  # Print #parameters and #FLOPs in model.
-  compute_model_statistics(batch_size, is_training=is_training)
-
   if is_training:
     mask_targets = training_ops.get_mask_targets(
         selected_box_rois, proposal_to_label_map, selected_box_targets,
@@ -336,6 +334,27 @@ def build_model_graph(features, labels, is_training, params):
     model_outputs.update({
         'detection_masks': tf.nn.sigmoid(mask_outputs),
     })
+
+  if params['num_attributes']:
+    attribute_outputs = heads.attributes_head(
+        roi_features=mask_roi_features,
+        num_attributes=params['num_attributes'],
+        mlp_head_dim=params['fast_rcnn_mlp_head_dim'],
+    )
+
+    if is_training:
+      attribute_targets = tf.gather(labels['gt_attributes'], proposal_to_label_map,
+                                    batch_dims=1)  # [batch, K, num_attributes]
+
+      model_outputs.update({
+        'attribute_outputs': attribute_outputs,
+        'attribute_targets': attribute_targets,
+      })
+    else:
+      model_outputs['detection_attributes'] = tf.nn.sigmoid(attribute_outputs)
+
+  # Print #parameters and #FLOPs in model.
+  compute_model_statistics(batch_size, is_training=is_training)
 
   return model_outputs
 
@@ -465,6 +484,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
    fast_rcnn_box_loss) = losses.fast_rcnn_loss(
        model_outputs['class_outputs'], model_outputs['box_outputs'],
        model_outputs['class_targets'], model_outputs['box_targets'], params)
+  
   # Only training has the mask loss. Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/model_builder.py  # pylint: disable=line-too-long
   if mode == tf.estimator.ModeKeys.TRAIN and params['include_mask']:
     mask_loss = losses.mask_rcnn_loss(
@@ -472,6 +492,13 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
         model_outputs['selected_class_targets'], params)
   else:
     mask_loss = 0.
+      
+  if mode == tf.estimator.ModeKeys.TRAIN and params['num_attributes']:
+    attributes_loss = losses.attributes_loss(model_outputs['attribute_outputs'], model_outputs['attribute_targets'],
+                                             model_outputs['selected_class_targets'])
+  else:
+    attributes_loss = 0.
+
   if variable_filter_fn and ('resnet' in params['backbone']):
     var_list = variable_filter_fn(tf.trainable_variables(),
                                   params['backbone'] + '/')
@@ -482,8 +509,8 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       for v in var_list
       if 'batch_normalization' not in v.name and 'bias' not in v.name
   ])
-  total_loss = (total_rpn_loss + total_fast_rcnn_loss + mask_loss +
-                l2_regularization_loss)
+
+  total_loss = (total_rpn_loss + total_fast_rcnn_loss + mask_loss + attributes_loss + l2_regularization_loss)
 
   host_call = None
   if mode == tf.estimator.ModeKeys.TRAIN:
@@ -556,7 +583,7 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
     if params['use_host_call']:
       def host_call_fn(global_step, total_loss, total_rpn_loss, rpn_score_loss,
                        rpn_box_loss, total_fast_rcnn_loss, fast_rcnn_class_loss,
-                       fast_rcnn_box_loss, mask_loss, l2_regularization_loss,
+                       fast_rcnn_box_loss, mask_loss, attributes_loss, l2_regularization_loss,
                        learning_rate):
         """Training host call. Creates scalar summaries for training metrics.
 
@@ -603,32 +630,26 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
             params['model_dir'],
             max_queue=params['iterations_per_loop']).as_default()):
           with tf2.summary.record_if(True):
-            tf2.summary.scalar(
-                'total_loss', tf.reduce_mean(total_loss), step=global_step)
-            tf2.summary.scalar(
-                'total_rpn_loss', tf.reduce_mean(total_rpn_loss),
-                step=global_step)
-            tf2.summary.scalar(
-                'rpn_score_loss', tf.reduce_mean(rpn_score_loss),
-                step=global_step)
-            tf2.summary.scalar(
-                'rpn_box_loss', tf.reduce_mean(rpn_box_loss), step=global_step)
-            tf2.summary.scalar(
-                'total_fast_rcnn_loss', tf.reduce_mean(total_fast_rcnn_loss),
-                step=global_step)
-            tf2.summary.scalar(
-                'fast_rcnn_class_loss', tf.reduce_mean(fast_rcnn_class_loss),
-                step=global_step)
-            tf2.summary.scalar(
-                'fast_rcnn_box_loss', tf.reduce_mean(fast_rcnn_box_loss),
-                step=global_step)
+            loss_tensors = {
+              'total_loss': total_loss,
+              'total_rpn_loss': total_rpn_loss,
+              'rpn_score_loss': rpn_score_loss,
+              'rpn_box_loss': rpn_box_loss,
+              'total_fast_rcnn_loss': total_fast_rcnn_loss,
+              'fast_rcnn_class_loss': fast_rcnn_class_loss,
+              'fast_rcnn_box_loss': fast_rcnn_box_loss,
+              'l2_regularization_loss': l2_regularization_loss,
+            }
+
             if params['include_mask']:
-              tf2.summary.scalar(
-                  'mask_loss', tf.reduce_mean(mask_loss), step=global_step)
-            tf2.summary.scalar(
-                'l2_regularization_loss',
-                tf.reduce_mean(l2_regularization_loss),
-                step=global_step)
+              loss_tensors['mask_loss'] = mask_loss
+
+            if params['num_attributes']:
+              loss_tensors['attributes_loss'] = attributes_loss
+
+            for loss_name, loss_tensor in loss_tensors.items():
+              tf2.summary.scalar('losses/' + loss_name, tf.reduce_mean(loss_tensor), step=global_step)
+
             tf2.summary.scalar(
                 'learning_rate', tf.reduce_mean(learning_rate),
                 step=global_step)
@@ -649,13 +670,14 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       fast_rcnn_class_loss_t = tf.reshape(fast_rcnn_class_loss, [1])
       fast_rcnn_box_loss_t = tf.reshape(fast_rcnn_box_loss, [1])
       mask_loss_t = tf.reshape(mask_loss, [1])
+      attributes_loss_t = tf.reshape(attributes_loss, [1])
       l2_regularization_loss = tf.reshape(l2_regularization_loss, [1])
       learning_rate_t = tf.reshape(learning_rate, [1])
       host_call = (host_call_fn,
                    [global_step_t, total_loss_t, total_rpn_loss_t,
                     rpn_score_loss_t, rpn_box_loss_t, total_fast_rcnn_loss_t,
                     fast_rcnn_class_loss_t, fast_rcnn_box_loss_t,
-                    mask_loss_t, l2_regularization_loss, learning_rate_t])
+                    mask_loss_t, attributes_loss_t, l2_regularization_loss, learning_rate_t])
   else:
     train_op = None
     scaffold_fn = None

@@ -38,6 +38,7 @@ EVAL_IMAGE_SIZE = 512
 def _prepare_labels_for_eval(data,
                              training_image_scale,
                              target_num_instances=MAX_NUM_INSTANCES,
+                             num_attributes=None,
                              use_instance_mask=False,
                              gt_mask_size=112):
   """Create labels dict for infeed from data of tf.Example."""
@@ -94,6 +95,10 @@ def _prepare_labels_for_eval(data,
       groundtruth_area = preprocess_ops.pad_to_fixed_size(
           groundtruth_area, 0, [target_num_instances, 1])
       labels['groundtruth_area'] = groundtruth_area
+
+  if num_attributes:
+    labels['groundtruth_attributes'] = preprocess_ops.pad_to_fixed_size(
+        data['groundtruth_attributes'], -1, [target_num_instances, num_attributes])
 
   return labels
 
@@ -192,7 +197,7 @@ class InputReader(object):
             self._mode == tf.estimator.ModeKeys.EVAL):
           image = preprocess_ops.normalize_image(image)
           if params['resize_method'] == 'retinanet':
-            image, image_info, _, _, _ = preprocess_ops.resize_crop_pad(
+            image, image_info, _, _, _, _ = preprocess_ops.resize_crop_pad(
                 image, params['image_size'], 2 ** params['max_level'])
           else:
             image, image_info, _, _, _ = preprocess_ops.resize_crop_pad_v2(
@@ -216,6 +221,7 @@ class InputReader(object):
                 data,
                 image_info[2],
                 target_num_instances=self._max_num_instances,
+                num_attributes=self._num_attributes,
                 use_instance_mask=params['include_mask'],
                 gt_mask_size=params['gt_mask_size'])
             return {'features': features, 'labels': labels}
@@ -226,6 +232,11 @@ class InputReader(object):
           instance_masks = None
           if self._use_instance_mask:
             instance_masks = data['groundtruth_instance_masks']
+
+          attributes = None
+          if self._num_attributes:
+              attributes = data['groundtruth_attributes']
+
           boxes = data['groundtruth_boxes']
           classes = data['groundtruth_classes']
           classes = tf.reshape(tf.cast(classes, dtype=tf.float32), [-1, 1])
@@ -237,8 +248,12 @@ class InputReader(object):
             indices = tf.where(tf.logical_not(data['groundtruth_is_crowd']))
             classes = tf.gather_nd(classes, indices)
             boxes = tf.gather_nd(boxes, indices)
+
             if self._use_instance_mask:
               instance_masks = tf.gather_nd(instance_masks, indices)
+
+            if self._num_attributes:
+              attributes = tf.gather_nd(attributes, indices)
 
           image = preprocess_ops.normalize_image(image)
           if params['input_rand_hflip']:
@@ -251,7 +266,7 @@ class InputReader(object):
               image, boxes = flipped_results
           # Scaling, jittering and padding.
           if params['resize_method'] == 'retinanet':
-            image, image_info, boxes, classes, cropped_gt_masks = (
+            image, image_info, boxes, classes, attributes, cropped_gt_masks = (
                 preprocess_ops.resize_crop_pad(
                     image,
                     params['image_size'],
@@ -260,6 +275,7 @@ class InputReader(object):
                     aug_scale_max=params['aug_scale_max'],
                     boxes=boxes,
                     classes=classes,
+                    attributes=attributes,
                     masks=instance_masks,
                     crop_mask_size=params['gt_mask_size']))
           else:
@@ -321,6 +337,11 @@ class InputReader(object):
                 [self._max_num_instances, params['gt_mask_size'] + 4,
                  params['gt_mask_size'] + 4])
 
+          # pad attributes
+          if self._num_attributes:
+            attributes = preprocess_ops.pad_to_fixed_size(
+                attributes, -1, [self._max_num_instances, self._num_attributes])
+
           if params['precision'] == 'bfloat16':
             image = tf.cast(image, dtype=tf.bfloat16)
 
@@ -335,8 +356,13 @@ class InputReader(object):
             labels['box_targets_%d' % level] = box_targets[level]
           labels['gt_boxes'] = boxes
           labels['gt_classes'] = classes
+
           if self._use_instance_mask:
             labels['cropped_gt_masks'] = cropped_gt_masks
+
+          if self._num_attributes:
+              labels['gt_attributes'] = attributes
+
           return features, labels
 
     return _dataset_parser

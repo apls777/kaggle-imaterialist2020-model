@@ -179,7 +179,7 @@ class TfExampleDecoder(object):
     if self._num_attributes:
         decoded_tensors.update({
             'groundtruth_attributes': tf.reshape(
-                tf.cast(tf.io.decode_raw(parsed_tensors['image/object/attributes/labels'], tf.bool), tf.int32),
+                tf.cast(tf.io.decode_raw(parsed_tensors['image/object/attributes/labels'], tf.bool), tf.float32),
                 shape=(-1, self._num_attributes),
             ),
         })

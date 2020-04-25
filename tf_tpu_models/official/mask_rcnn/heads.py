@@ -105,11 +105,13 @@ def box_head(roi_features, num_classes=91, mlp_head_dim=1024):
         kernel_initializer=tf.random_normal_initializer(stddev=0.01),
         bias_initializer=tf.zeros_initializer(),
         name='class-predict')
+
     box_outputs = tf.layers.dense(
         net, num_classes * 4,
         kernel_initializer=tf.random_normal_initializer(stddev=0.001),
         bias_initializer=tf.zeros_initializer(),
         name='box-predict')
+
     return class_outputs, box_outputs, box_features
 
 
@@ -230,3 +232,40 @@ def mask_head(roi_features,
         mask_outputs = tf.gather_nd(mask_outputs, gather_indices)
 
     return mask_outputs
+
+
+def attributes_head(roi_features, num_attributes, mlp_head_dim=1024):
+  """Box and class branches for the Mask-RCNN model.
+
+  Args:
+    roi_features: A ROI feature tensor of shape
+      [batch_size, num_rois, height_l, width_l, num_filters].
+    num_attributes: a integer for the number of attributes.
+    mlp_head_dim: a integer that is the hidden dimension in the fully-connected
+      layers.
+  Returns:
+    class_outputs: a tensor with a shape of
+      [batch_size, num_rois, num_classes], representing the class predictions.
+    box_outputs: a tensor with a shape of
+      [batch_size, num_rois, num_classes * 4], representing the box predictions.
+    box_features: a tensor with a shape of
+      [batch_size, num_rois, mlp_head_dim], representing the box features.
+  """
+  with tf.variable_scope('attributes_head', reuse=tf.AUTO_REUSE):
+    # reshape inputs beofre FC.
+    batch_size, num_rois, height, width, filters = (
+        roi_features.get_shape().as_list())
+    roi_features = tf.reshape(roi_features,
+                              [batch_size, num_rois, height * width * filters])
+    net = tf.layers.dense(roi_features, units=mlp_head_dim,
+                          activation=tf.nn.relu, name='fc6')
+    net = tf.layers.dense(net, units=mlp_head_dim,
+                          activation=tf.nn.relu, name='fc7')
+
+    attribute_outputs = tf.layers.dense(
+        net, num_attributes,
+        kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+        bias_initializer=tf.zeros_initializer(),
+        name='attributes-predict')
+
+    return attribute_outputs

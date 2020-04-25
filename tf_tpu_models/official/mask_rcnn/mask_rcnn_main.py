@@ -146,14 +146,16 @@ def main(argv):
         params.training_file_pattern,
         mode=tf.estimator.ModeKeys.TRAIN,
         use_fake_data=FLAGS.use_fake_data,
-        use_instance_mask=params.include_mask)
+        use_instance_mask=params.include_mask,
+        num_attributes=params.num_attributes)
   if (FLAGS.mode in ('eval', 'train_and_eval') or
       (FLAGS.mode == 'train' and FLAGS.eval_after_training)):
     eval_input_fn = dataloader.InputReader(
         params.validation_file_pattern,
         mode=tf.estimator.ModeKeys.PREDICT,
         num_examples=params.eval_samples,
-        use_instance_mask=params.include_mask_for_eval)
+        use_instance_mask=params.include_mask_for_eval,
+        num_attributes=params.num_attributes)
 
   run_executer(params, train_input_fn, eval_input_fn)
 

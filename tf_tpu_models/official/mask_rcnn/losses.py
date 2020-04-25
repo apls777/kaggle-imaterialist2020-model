@@ -237,3 +237,21 @@ def mask_rcnn_loss(mask_outputs, mask_targets, select_class_targets, params):
         mask_targets, mask_outputs, weights=weights,
         reduction=tf.losses.Reduction.SUM_BY_NONZERO_WEIGHTS)
     return params['mrcnn_weight_loss_mask'] * loss
+
+
+def attributes_loss(attribute_outputs, attribute_targets, select_class_targets, normalizer=1.0):
+  """Computes classification loss."""
+  with tf.name_scope('attributes_loss'):
+    # The loss is normalized by the sum of non-zero weights before additional
+    # normalizer provided by the function caller.
+
+    batch_size, num_instances, num_attributes = attribute_outputs.get_shape().as_list()
+    weights = tf.tile(
+        tf.reshape(tf.greater(select_class_targets, 0), [batch_size, num_instances, 1]),
+        [1, 1, num_attributes])
+
+    loss = tf.losses.sigmoid_cross_entropy(attribute_targets, attribute_outputs, weights=weights,
+                                           reduction=tf.losses.Reduction.SUM_BY_NONZERO_WEIGHTS)
+    loss /= normalizer
+
+    return loss

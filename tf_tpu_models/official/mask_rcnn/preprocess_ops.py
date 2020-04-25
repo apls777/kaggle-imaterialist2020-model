@@ -67,6 +67,7 @@ def resize_crop_pad(image,
                     aug_scale_max=1.0,
                     boxes=None,
                     classes=None,
+                    attributes=None,
                     masks=None,
                     crop_mask_size=112):
   """Resize, crop and pad images, boxes and masks (RetinaNet style).
@@ -186,6 +187,8 @@ def resize_crop_pad(image,
           tf.greater(boxes[:, 3] - boxes[:, 1], 0)))[:, 0]
       boxes = tf.gather(boxes, indices)
       classes = tf.gather(classes, indices)
+      if attributes is not None:
+          attributes = tf.gather(attributes, indices)
       if masks is not None:
         masks = tf.gather(masks, indices)
 
@@ -219,7 +222,7 @@ def resize_crop_pad(image,
       input_height,
       input_width])
 
-  return image, image_info, boxes, classes, masks
+  return image, image_info, boxes, classes, attributes, masks
 
 
 def resize_crop_pad_v2(image,

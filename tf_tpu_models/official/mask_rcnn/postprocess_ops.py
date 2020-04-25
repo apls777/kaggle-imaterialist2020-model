@@ -109,6 +109,7 @@ def generate_detections_per_image_tpu(cls_outputs,
     class_i_post_nms_scores = tf.where(
         mask, class_i_post_nms_scores, tf.zeros_like(class_i_post_nms_scores))
     class_i_classes = tf.fill(tf.shape(class_i_post_nms_scores), class_i+1)
+
     list_of_all_boxes.append(class_i_post_nms_boxes)
     list_of_all_scores.append(class_i_post_nms_scores)
     list_of_all_classes.append(class_i_classes)
@@ -130,6 +131,7 @@ def generate_detections_per_image_tpu(cls_outputs,
       tf.zeros_like(post_nms_scores))
   num_valid_boxes = tf.reduce_sum(valid_mask, axis=-1)
   box_classes = tf.to_float(post_nms_classes)
+
   return num_valid_boxes, post_nms_boxes, box_classes, post_nms_scores
 
 
@@ -188,6 +190,7 @@ def generate_detections_tpu(class_outputs,
     box_coordinates = tf.stack(box_coordinates)
     box_classes = tf.stack(box_classes)
     box_scores = tf.stack(box_scores)
+
     return num_valid_boxes, box_coordinates, box_classes, box_scores
 
 

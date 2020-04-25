@@ -61,7 +61,7 @@ scripts:
       --model_dir=${MODEL_DIR} \
       --num_cores=8 \
       --mode="{{MODE}}" \
-      --eval_wait_next_checkpoint=True \
+      --eval_wait_next_checkpoint=False \
       --config_file=configs/mask_rcnn/{{CONFIG}}.yaml
     else
       echo "MODEL, CONFIG, TPU and MODE parameters are required."

@@ -19,14 +19,17 @@ from __future__ import division
 from __future__ import print_function
 
 import io
+from collections import defaultdict
 from absl import logging
 import numpy as np
 from PIL import Image
 import six
 import tensorflow.compat.v1 as tf
-
+from pycocotools import mask as mask_utils
+from sklearn.metrics import precision_recall_curve, precision_recall_fscore_support
 from . import coco_metric
 from . import coco_utils
+from .coco_metric import load_predictions
 from .object_detection import visualization_utils
 
 
@@ -49,8 +52,7 @@ def process_prediction_for_eval(prediction):
   return prediction
 
 
-def compute_coco_eval_metric(predictor,
-                             num_batches=-1,
+def compute_coco_eval_metric(predictions,
                              include_mask=True,
                              annotation_json_file=None):
   """Compute COCO eval metric given a prediction generator.
@@ -66,37 +68,9 @@ def compute_coco_eval_metric(predictor,
   Returns:
     eval_results: the aggregated COCO metric eval results.
   """
-  del num_batches
-
   if not annotation_json_file:
     annotation_json_file = None
   use_groundtruth_from_json = (annotation_json_file is not None)
-
-  batch_idx = 0
-  predictions = dict()
-  while True:
-    try:
-      prediction = six.next(predictor)
-      logging.info('Running inference on batch %d...', (batch_idx + 1))
-    except StopIteration:
-      logging.info('Finished the eval set at %d batch.', (batch_idx + 1))
-      break
-
-    prediction = process_prediction_for_eval(prediction)
-    for k, v in six.iteritems(prediction):
-      if k not in predictions:
-        predictions[k] = [v]
-      else:
-        predictions[k].append(v)
-
-    batch_idx = batch_idx + 1
-
-  for k, v in six.iteritems(predictions):
-    predictions[k] = np.concatenate(predictions[k], axis=0)
-
-  if 'orig_images' in predictions and predictions['orig_images'].shape[0] > 10:
-    # Only samples a few images for visualization.
-    predictions['orig_images'] = predictions['orig_images'][:10]
 
   if use_groundtruth_from_json:
     eval_metric = coco_metric.EvaluationMetric(
@@ -113,7 +87,7 @@ def compute_coco_eval_metric(predictor,
 
   logging.info('Eval results: %s', eval_results)
 
-  return eval_results, predictions
+  return eval_results
 
 
 def evaluate(eval_estimator,
@@ -126,13 +100,198 @@ def evaluate(eval_estimator,
   predictor = eval_estimator.predict(
       input_fn=input_fn, yield_single_examples=False)
   # Every predictor.next() gets a batch of prediction (a dictionary).
+
   num_eval_times = num_eval_samples // eval_batch_size
   assert num_eval_times > 0, 'num_eval_samples >= eval_batch_size!'
-  eval_results, predictions = compute_coco_eval_metric(predictor,
-                                                       num_eval_times,
-                                                       include_mask,
-                                                       validation_json_file)
+
+  predictions = _get_predictions(predictor)
+  eval_results = compute_coco_eval_metric(predictions, include_mask, validation_json_file)
+
+  attr_eval_results = _evaluate_attributes(predictions)
+  eval_results.update(attr_eval_results)
+
   return eval_results, predictions
+
+
+def _evaluate_attributes(predictions: dict):
+    _, annotations_pred = load_predictions(predictions, include_mask=False, include_attributes=True)
+    _, annotations_gt = coco_utils.extract_coco_groundtruth(predictions, include_mask=False, include_attributes=True)
+
+    # get a number of attributes
+    num_attributes = len(annotations_gt[0]['attributes_multi_hot'])
+
+    # extract category IDs
+    category_ids = sorted(set(int(ann['category_id']) for ann in annotations_gt))
+
+    # group annotations and predictions by image ID and category ID
+    annotations_pred = _group_annotations(annotations_pred)
+    annotations_gt = _group_annotations(annotations_gt)
+
+    # get image IDs
+    image_ids = list(annotations_gt.keys())
+
+    # collect all attribute predictions and labels
+    attributes_pred = []
+    attributes_gt = []
+    for category_id in category_ids:
+        for image_id in image_ids:
+            boxes_pred = annotations_pred[image_id].get(category_id)
+            boxes_gt = annotations_gt[image_id].get(category_id)
+            if not boxes_pred or not boxes_gt:
+                continue
+
+            pred_bboxes = [box['bbox'] for box in boxes_pred]
+            gt_bboxes = [box['bbox'] for box in boxes_gt]
+            is_crowd = [0] * len(gt_bboxes)
+            ious = mask_utils.iou(pred_bboxes, gt_bboxes, is_crowd)
+
+            for i, box_pred in enumerate(boxes_pred):
+                for j, box_gt in enumerate(boxes_gt):
+                    if ious[i, j] > 0.5:
+                        attributes_pred.append(box_pred['attributes_multi_hot'])
+                        attributes_gt.append(box_gt['attributes_multi_hot'])
+
+    attributes_pred = np.array(attributes_pred)
+    attributes_gt = np.array(attributes_gt)
+
+    # compute attribute thresholds and metrics
+    attr_precisions = np.zeros(num_attributes, dtype=np.float32)
+    attr_recalls = np.zeros(num_attributes, dtype=np.float32)
+    attr_f1_scores = np.zeros(num_attributes, dtype=np.float32)
+    attr_thresholds = np.zeros(num_attributes, dtype=np.float32)
+
+    for attr_id in range(num_attributes):
+        precisions, recalls, thresholds = precision_recall_curve(attributes_gt[:, attr_id], attributes_pred[:, attr_id])
+
+        best_precision = 0
+        best_recall = 0
+        best_f1_score = 0
+        best_threshold = 0
+        for precision, recall, threshold in zip(precisions[:-1], recalls[:-1], thresholds):
+            f1_score_val = compute_f1_score(precision, recall)
+            if f1_score_val > best_f1_score:
+                best_precision = precision
+                best_recall = recall
+                best_f1_score = f1_score_val
+                best_threshold = threshold
+
+        attr_precisions[attr_id] = best_precision
+        attr_recalls[attr_id] = best_recall
+        attr_f1_scores[attr_id] = best_f1_score
+        attr_thresholds[attr_id] = best_threshold
+
+    # evaluate attribute predictions for boxes
+    all_cat_precisions = {}
+    all_cat_recalls = {}
+    all_cat_f1_scores = {}
+    for category_id in category_ids:
+        cat_precisions = []
+        cat_recalls = []
+        cat_f1_scores = []
+
+        for image_id in image_ids:
+            boxes_pred = annotations_pred[image_id][category_id]
+            boxes_gt = annotations_gt[image_id][category_id]
+
+            pred_bboxes = [box['bbox'] for box in boxes_pred]
+            gt_bboxes = [box['bbox'] for box in boxes_gt]
+            is_crowd = [0] * len(gt_bboxes)
+            ious = mask_utils.iou(pred_bboxes, gt_bboxes, is_crowd)
+
+            img_precisions = []
+            img_recalls = []
+            img_f1_scores = []
+            for i, box_pred in enumerate(boxes_pred):
+                for j, box_gt in enumerate(boxes_gt):
+                # if sum(box_gt['attributes_multi_hot']):
+                    if ious[i, j] > 0.5:
+                        attr_pred = (box_pred['attributes_multi_hot'] >= attr_thresholds).astype(np.int32)
+                        attr_gt = box_gt['attributes_multi_hot']
+                        # tn, fp, fn, tp = confusion_matrix([0, 1, 0, 1], [1, 1, 1, 0]).ravel()
+
+                        has_pred = (attr_pred > 0).any()
+                        has_gt = (attr_gt > 0).any()
+
+                        if (has_pred and not has_gt) or (not has_pred and has_gt):
+                            precision, recall, f1_score = 0., 0., 0.
+                        elif not has_gt and not has_pred:
+                            precision, recall, f1_score = 1., 1., 1.
+                        else:
+                            precision, recall, f1_score, _ = precision_recall_fscore_support(attr_gt, attr_pred, average='binary')
+
+                        img_precisions.append(precision)
+                        img_recalls.append(recall)
+                        img_f1_scores.append(f1_score)
+
+            if img_precisions:
+                cat_precisions.append(sum(img_precisions) / len(img_precisions))
+                cat_recalls.append(sum(img_recalls) / len(img_recalls))
+                cat_f1_scores.append(sum(img_f1_scores) / len(img_f1_scores))
+
+        # average attribute precision, recall and F1-score across all images
+        all_cat_precisions[category_id] =  (sum(cat_precisions) / len(cat_precisions)) if cat_precisions else None
+        all_cat_recalls[category_id] = (sum(cat_recalls) / len(cat_recalls)) if cat_recalls else None
+        all_cat_f1_scores[category_id] = (sum(cat_f1_scores) / len(cat_f1_scores)) if cat_f1_scores else None
+
+    eval_results = {}
+    for attr_id in range(num_attributes):
+        eval_results['attribute_precision/attr_%03d' % attr_id] = attr_precisions[attr_id]
+        eval_results['attribute_recall/attr_%03d' % attr_id] = attr_recalls[attr_id]
+        eval_results['attribute_f1_score/attr_%03d' % attr_id] = attr_f1_scores[attr_id]
+        eval_results['attribute_threshold/attr_%03d' % attr_id] = attr_thresholds[attr_id]
+
+    for category_id in category_ids:
+        eval_results['category_attributes_precision/cat_%02d' % category_id] = all_cat_precisions[category_id]
+        eval_results['category_attributes_recall/cat_%02d' % category_id] = all_cat_recalls[category_id]
+        eval_results['category_attributes_f1_score/cat_%02d' % category_id] = all_cat_f1_scores[category_id]
+
+    return eval_results
+
+
+def _group_annotations(annotations: list):
+    grouped_annotations = defaultdict(lambda: defaultdict(list))
+    for ann in annotations:
+        grouped_annotations[int(ann['image_id'])][int(ann['category_id'])].append(ann)
+
+    return grouped_annotations
+
+
+def compute_f1_score(precision: float, recall: float):
+    if precision + recall == 0.:
+        return 0.
+
+    return (2 * precision * recall) / (precision + recall)
+
+
+def _get_predictions(predictor):
+    batch_idx = 0
+    predictions = dict()
+    while True:
+        try:
+            prediction = six.next(predictor)
+            logging.info('Running inference on batch %d...', (batch_idx + 1))
+        except StopIteration:
+            logging.info('Finished the eval set at %d batch.', (batch_idx + 1))
+            break
+
+        prediction = process_prediction_for_eval(prediction)
+
+        for k, v in six.iteritems(prediction):
+            if k not in predictions:
+                predictions[k] = [v]
+            else:
+                predictions[k].append(v)
+
+        batch_idx = batch_idx + 1
+
+    for k, v in six.iteritems(predictions):
+        predictions[k] = np.concatenate(predictions[k], axis=0)
+
+    if 'orig_images' in predictions and predictions['orig_images'].shape[0] > 10:
+        # Only samples a few images for visualization.
+        predictions['orig_images'] = predictions['orig_images'][:10]
+
+    return predictions
 
 
 def write_summary(eval_results, summary_writer, current_step, predictions=None):

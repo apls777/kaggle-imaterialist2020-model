@@ -168,7 +168,6 @@ class DistributedExecuter(object):
       return True
 
     skip_checkpoint = self._flags.eval_wait_next_checkpoint
-    eval_results = None
     # Run evaluation when there's a new checkpoint
     for ckpt in tf.train.checkpoints_iterator(
         self._flags.model_dir,
@@ -206,8 +205,8 @@ class DistributedExecuter(object):
         # file could have been deleted already.
         logging.info('Checkpoint %s no longer exists, skipping checkpoint',
                      ckpt)
+
     summary_writer.close()
-    return eval_results
 
   def train_and_eval(self, train_input_fn, eval_input_fn):
     """Run distributed train and eval on Mask RCNN model."""
