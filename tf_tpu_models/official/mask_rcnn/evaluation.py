@@ -245,6 +245,15 @@ def _evaluate_attributes(predictions: dict):
         eval_results['category_attributes_recall/cat_%02d' % category_id] = all_cat_recalls[category_id]
         eval_results['category_attributes_f1_score/cat_%02d' % category_id] = all_cat_f1_scores[category_id]
 
+    eval_results.update({
+        'performance/category_attributes_precision': np.array(all_cat_precisions.values(), dtype=np.float32).mean(),
+        'performance/category_attributes_recall': np.array(all_cat_recalls.values(), dtype=np.float32).mean(),
+        'performance/category_attributes_f1_score': np.array(all_cat_f1_scores.values(), dtype=np.float32).mean(),
+        'performance/attribute_precision': attr_precisions.mean(),
+        'performance/attribute_recall': attr_recalls.mean(),
+        'performance/attribute_f1_score': attr_f1_scores.mean(),
+    })
+
     return eval_results
 
 

@@ -260,7 +260,7 @@ def serving_model_graph_builder(output_source_id,
       final_box_rois = model_outputs['detection_boxes']
       final_roi_features = spatial_transform_ops.multilevel_crop_and_resize(
           model_outputs['fpn_features'], final_box_rois, output_size=7)
-      class_outputs, _, final_box_features = heads.box_head(
+      class_outputs, _, _, final_box_features = heads.box_head(
           final_roi_features, num_classes=params['num_classes'],
           mlp_head_dim=params['fast_rcnn_mlp_head_dim'])
       model_outputs.update({

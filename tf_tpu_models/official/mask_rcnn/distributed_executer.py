@@ -24,7 +24,8 @@ import os
 from absl import logging
 import numpy as np
 import tensorflow.compat.v1 as tf
-
+import pandas as pd
+from .submission import generate_submission
 from ...hyperparameters import params_dict
 from . import evaluation
 
@@ -252,6 +253,28 @@ class DistributedExecuter(object):
                         self._model_params.total_steps)
     summary_writer.close()
     return eval_results
+
+  def submit(self, eval_input_fn):
+    """Run distributed eval on Mask RCNN model."""
+
+    output_dir = os.path.join(self._flags.model_dir, 'submission')
+    tf.gfile.MakeDirs(output_dir)
+    output_path = os.path.join(output_dir, '200424-attr-test3_7500_v2.csv')
+
+    # Summary writer writes out eval metrics.
+    run_config = self.build_strategy_configuration()
+    eval_params = self.build_model_parameters('eval', run_config)
+    eval_estimator = self.build_mask_rcnn_estimator(eval_params, run_config, 'eval')
+
+    logging.info('Generating submission file...')
+
+    checkpoint_path = 'gs://kaggle-imaterialist2020-data-europe-west4/training/200424-attr-test3/model.ckpt-7500'
+    rows = generate_submission(eval_estimator, eval_input_fn, checkpoint_path, self._model_params.num_attributes)
+
+    logging.info('Saving submission file...')
+
+    submission_df = pd.DataFrame(rows)
+    submission_df.to_csv(output_path, index=False)
 
 
 class TPUEstimatorExecuter(DistributedExecuter):

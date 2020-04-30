@@ -5,6 +5,7 @@ pyyaml
 Pillow
 git+https://github.com/cocodataset/cocoapi#egg=pycocotools&subdirectory=PythonAPI
 scikit-learn
+pandas
 
 # TPU
 google-api-python-client

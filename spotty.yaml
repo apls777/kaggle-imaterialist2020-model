@@ -67,6 +67,23 @@ scripts:
       echo "MODEL, CONFIG, TPU and MODE parameters are required."
     fi
 
+  submit: |
+    if [ -n "{{MODEL}}" ] && [ -n "{{CONFIG}}" ] && [ -n "{{TPU}}" ]; then
+      export STORAGE_BUCKET=gs://kaggle-imaterialist2020-data-europe-west4
+      export MODEL_DIR=${STORAGE_BUCKET}/training/{{MODEL}}
+
+      PYTHONPATH=. python tf_tpu_models/official/mask_rcnn/mask_rcnn_main.py \
+      --use_tpu=True \
+      --tpu={{TPU}} \
+      --model_dir=${MODEL_DIR} \
+      --num_cores=8 \
+      --mode="submit" \
+      --config_file=configs/mask_rcnn/{{CONFIG}}.yaml \
+      --params_override="include_groundtruth_in_features=False, validation_file_pattern=${STORAGE_BUCKET}/datasets/imaterialist2020/tfrecords/test-*"
+    else
+      echo "MODEL, CONFIG and TPU parameters are required."
+    fi
+
   eval-coco: |
     if [ -n "{{MODEL}}" ] && [ -n "{{CONFIG}}" ] && [ -n "{{TPU}}" ]; then
       export TPU_NAME={{TPU}}

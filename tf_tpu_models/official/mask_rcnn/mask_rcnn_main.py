@@ -106,6 +106,8 @@ def run_executer(model_params, train_input_fn=None, eval_input_fn=None):
     executer.train(train_input_fn, FLAGS.eval_after_training, eval_input_fn)
   elif FLAGS.mode == 'eval':
     executer.eval(eval_input_fn)
+  elif FLAGS.mode == 'submit':
+    executer.submit(eval_input_fn)
   elif FLAGS.mode == 'train_and_eval':
     executer.train_and_eval(train_input_fn, eval_input_fn)
   else:
@@ -133,6 +135,7 @@ def main(argv):
   if (FLAGS.mode in ('train', 'train_and_eval') and
       not params.training_file_pattern):
     raise RuntimeError('You must specify `training_file_pattern` for training.')
+
   if FLAGS.mode in ('eval', 'train_and_eval'):
     if not params.validation_file_pattern:
       raise RuntimeError('You must specify `validation_file_pattern` '
@@ -148,7 +151,8 @@ def main(argv):
         use_fake_data=FLAGS.use_fake_data,
         use_instance_mask=params.include_mask,
         num_attributes=params.num_attributes)
-  if (FLAGS.mode in ('eval', 'train_and_eval') or
+
+  if (FLAGS.mode in ('eval', 'train_and_eval', 'submit') or
       (FLAGS.mode == 'train' and FLAGS.eval_after_training)):
     eval_input_fn = dataloader.InputReader(
         params.validation_file_pattern,
