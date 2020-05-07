@@ -35,22 +35,21 @@ class ShapeMaskModel(base_model.BaseModel):
   def __init__(self, params):
     super(ShapeMaskModel, self).__init__(params)
 
-    self._anchor_params = params.anchor
+    self._params = params
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
     self._fpn_fn = factory.multilevel_features_generator(params)
-    self._retinanet_head_fn = factory.retinanet_head_generator(
-        params.retinanet_head)
-    self._shape_prior_head_fn = factory.shapeprior_head_generator(
-        params.shapemask_head)
-    self._coarse_mask_fn = factory.coarsemask_head_generator(
-        params.shapemask_head)
-    self._fine_mask_fn = factory.finemask_head_generator(params.shapemask_head)
-    self._outer_box_scale = params.shapemask_parser.outer_box_scale
+    self._retinanet_head_fn = factory.retinanet_head_generator(params)
+    self._shape_prior_head_fn = factory.shapeprior_head_generator(params)
+    self._coarse_mask_fn = factory.coarsemask_head_generator(params)
+    self._fine_mask_fn = factory.finemask_head_generator(params)
+
+    self._outer_box_scale = params.architecture.outer_box_scale
 
     # Loss function.
-    self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)
+    self._cls_loss_fn = losses.RetinanetClassLoss(
+        params.retinanet_loss, params.architecture.num_classes)
     self._box_loss_fn = losses.RetinanetBoxLoss(params.retinanet_loss)
     self._box_loss_weight = params.retinanet_loss.box_loss_weight
     # Mask loss function.
@@ -64,6 +63,8 @@ class ShapeMaskModel(base_model.BaseModel):
         params.shapemask_loss.fine_mask_loss_weight)
     # Predict function.
     self._generate_detections_fn = postprocess_ops.MultilevelDetectionGenerator(
+        params.architecture.min_level,
+        params.architecture.max_level,
         params.postprocess)
 
   def _build_outputs(self, images, labels, mode):
@@ -73,11 +74,11 @@ class ShapeMaskModel(base_model.BaseModel):
       anchor_boxes = labels['anchor_boxes']
     else:
       anchor_boxes = anchor.Anchor(
-          self._anchor_params.min_level,
-          self._anchor_params.max_level,
-          self._anchor_params.num_scales,
-          self._anchor_params.aspect_ratios,
-          self._anchor_params.anchor_size,
+          self._params.architecture.min_level,
+          self._params.architecture.max_level,
+          self._params.anchor.num_scales,
+          self._params.anchor.aspect_ratios,
+          self._params.anchor.anchor_size,
           images.get_shape().as_list()[1:3]).multilevel_boxes
 
       batch_size = tf.shape(images)[0]
@@ -130,6 +131,7 @@ class ShapeMaskModel(base_model.BaseModel):
         'fine_mask_logits': fine_mask_logits,
         'coarse_mask_logits': coarse_mask_logits,
         'prior_masks': prior_masks,
+        'fpn_features': fpn_features,
     }
 
     if not is_training:

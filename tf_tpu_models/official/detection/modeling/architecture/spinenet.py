@@ -62,6 +62,39 @@ SPINENET_BLOCK_SPECS = [
     (6, 'bottleneck', (12, 14), True),
 ]
 
+SCALING_MAP = {
+    '49S': {
+        'endpoints_num_filters': 128,
+        'filter_size_scale': 0.65,
+        'resample_alpha': 0.5,
+        'block_repeats': 1,
+    },
+    '49': {
+        'endpoints_num_filters': 256,
+        'filter_size_scale': 1.0,
+        'resample_alpha': 0.5,
+        'block_repeats': 1,
+    },
+    '96': {
+        'endpoints_num_filters': 256,
+        'filter_size_scale': 1.0,
+        'resample_alpha': 0.5,
+        'block_repeats': 2,
+    },
+    '143': {
+        'endpoints_num_filters': 256,
+        'filter_size_scale': 1.0,
+        'resample_alpha': 1.0,
+        'block_repeats': 3,
+    },
+    '190': {
+        'endpoints_num_filters': 512,
+        'filter_size_scale': 1.3,
+        'resample_alpha': 1.0,
+        'block_repeats': 4,
+    },
+}
+
 
 class BlockSpec(object):
   """A container class that specifies the block configuration for SpineNet."""
@@ -87,7 +120,7 @@ def block_group(inputs,
                 block_fn_cand,
                 block_repeats,
                 activation=tf.nn.swish,
-                batch_norm_relu=nn_ops.BatchNormRelu(),
+                batch_norm_activation=nn_ops.BatchNormActivation(),
                 dropblock=nn_ops.Dropblock(),
                 drop_connect_rate=None,
                 data_format='channels_last',
@@ -116,7 +149,7 @@ def block_group(inputs,
       strides,
       use_projection=use_projection,
       activation=activation,
-      batch_norm_relu=batch_norm_relu,
+      batch_norm_activation=batch_norm_activation,
       dropblock=dropblock,
       drop_connect_rate=drop_connect_rate,
       data_format=data_format,
@@ -128,7 +161,7 @@ def block_group(inputs,
         1,
         use_projection=False,
         activation=activation,
-        batch_norm_relu=batch_norm_relu,
+        batch_norm_activation=batch_norm_activation,
         dropblock=dropblock,
         drop_connect_rate=drop_connect_rate,
         data_format=data_format,
@@ -143,7 +176,7 @@ def resample_with_alpha(feat,
                         target_block_fn,
                         alpha=1.0,
                         use_native_resize_op=False,
-                        batch_norm_relu=nn_ops.BatchNormRelu(),
+                        batch_norm_activation=nn_ops.BatchNormActivation(),
                         data_format='channels_last',
                         name=None,
                         is_training=False):
@@ -164,7 +197,7 @@ def resample_with_alpha(feat,
         kernel_size=1,
         strides=1,
         data_format=data_format)
-    feat = batch_norm_relu(feat, is_training=is_training)
+    feat = batch_norm_activation(feat, is_training=is_training)
 
     # Down-sample.
     if width > target_width:
@@ -175,7 +208,7 @@ def resample_with_alpha(feat,
           kernel_size=3,
           strides=2,
           data_format=data_format)
-      feat = batch_norm_relu(feat, is_training=is_training)
+      feat = batch_norm_activation(feat, is_training=is_training)
       # Apply maxpool to further reduce feature map size if necessary.
       if width // target_width > 2:
         if width % target_width != 0:
@@ -211,7 +244,7 @@ def resample_with_alpha(feat,
         kernel_size=1,
         strides=1,
         data_format=data_format)
-    feat = batch_norm_relu(feat, relu=False, is_training=is_training)
+    feat = batch_norm_activation(feat, relu=False, is_training=is_training)
 
   return feat
 
@@ -232,14 +265,15 @@ class SpineNet(object):
   def __init__(self,
                min_level=3,
                max_level=7,
+               block_specs=build_block_specs(),
                endpoints_num_filters=256,
                resample_alpha=0.5,
                use_native_resize_op=False,
-               block_specs=build_block_specs(),
                block_repeats=1,
                filter_size_scale=1.0,
                activation='swish',
-               batch_norm_relu=nn_ops.BatchNormRelu(),
+               batch_norm_activation=nn_ops.BatchNormActivation(
+                   activation='swish'),
                init_drop_connect_rate=None,
                data_format='channels_last'):
     """SpineNet initialization function.
@@ -247,6 +281,9 @@ class SpineNet(object):
     Args:
       min_level: an `int` representing the minimum level in SpineNet endpoints.
       max_level: an `int` representing the maximum level in SpineNet endpoints.
+      block_specs: a list of BlockSpec objects that specifies the SpineNet
+        network topology. By default, the previously discovered architecture is
+        used.
       endpoints_num_filters: an `int` representing the final feature dimension
         of endpoints before the shared conv layers in head.
       resample_alpha: a `float` representing the scaling factor to scale feature
@@ -254,16 +291,13 @@ class SpineNet(object):
       use_native_resize_op: Whether to use native
         tf.image.nearest_neighbor_resize or the broadcast implmentation to do
         upsampling.
-      block_specs: a list of BlockSpec objects that specifies the SpineNet
-        network topology. By default, the previously discovered architecture is
-        used.
       block_repeats: an `int` representing the number of repeats per block
         group.
       filter_size_scale: a `float` representing the scaling factor to uniformaly
         scale feature dimension in SpineNet.
       activation: activation function. Support 'relu' and 'swish'.
-      batch_norm_relu: an operation that is added after convolutions, including
-        a batch norm layer and an optional relu activation.
+      batch_norm_activation: an operation that includes a batch normalization
+        layer followed by an optional activation layer.
       init_drop_connect_rate: a 'float' number that specifies the initial drop
         connection rate. Note that the default `None` means no drop connection
         is applied.
@@ -272,24 +306,24 @@ class SpineNet(object):
     """
     self._min_level = min_level
     self._max_level = max_level
+    self._block_specs = block_specs
     self._endpoints_num_filters = endpoints_num_filters
-    self._init_block_fn = 'bottleneck'
-    self._num_init_blocks = 2
-    self._resample_alpha = resample_alpha
     self._use_native_resize_op = use_native_resize_op
+    self._resample_alpha = resample_alpha
+    self._block_repeats = block_repeats
+    self._filter_size_scale = filter_size_scale
     if activation == 'relu':
       self._activation = tf.nn.relu
     elif activation == 'swish':
       self._activation = tf.nn.swish
     else:
       raise ValueError('Activation {} not implemented.'.format(activation))
-    self._block_specs = block_specs
-    self._block_repeats = block_repeats
-    self._filter_size_scale = filter_size_scale
-    self._batch_norm_relu = batch_norm_relu
-    self._dropblock = nn_ops.Dropblock()  # Hard-code it to not use DropBlock.
+    self._batch_norm_activation = batch_norm_activation
     self._init_drop_connect_rate = init_drop_connect_rate
     self._data_format = data_format
+    self._dropblock = nn_ops.Dropblock()  # Hard-code it to not use DropBlock.
+    self._init_block_fn = 'bottleneck'
+    self._num_init_blocks = 2
 
   def _build_stem_network(self, inputs, is_training):
     """Build the stem network."""
@@ -302,7 +336,7 @@ class SpineNet(object):
         strides=2,
         data_format=self._data_format)
     net = tf.identity(net, 'initial_conv')
-    net = self._batch_norm_relu(net, is_training=is_training)
+    net = self._batch_norm_activation(net, is_training=is_training)
     net = tf.layers.max_pooling2d(
         inputs=net,
         pool_size=3,
@@ -321,7 +355,7 @@ class SpineNet(object):
           block_fn_cand=self._init_block_fn,
           block_repeats=self._block_repeats,
           activation=self._activation,
-          batch_norm_relu=self._batch_norm_relu,
+          batch_norm_activation=self._batch_norm_activation,
           dropblock=self._dropblock,
           data_format=self._data_format,
           name='stem_block_{}'.format(i + 1),
@@ -340,7 +374,7 @@ class SpineNet(object):
           kernel_size=1,
           strides=1,
           data_format=self._data_format)
-      feature = self._batch_norm_relu(feature, is_training=is_training)
+      feature = self._batch_norm_activation(feature, is_training=is_training)
       endpoints[level] = feature
     return endpoints
 
@@ -381,7 +415,7 @@ class SpineNet(object):
             target_block_fn,
             alpha=self._resample_alpha,
             use_native_resize_op=self._use_native_resize_op,
-            batch_norm_relu=self._batch_norm_relu,
+            batch_norm_activation=self._batch_norm_activation,
             data_format=self._data_format,
             name='resample_{}_0'.format(i),
             is_training=is_training)
@@ -397,7 +431,7 @@ class SpineNet(object):
             target_block_fn,
             alpha=self._resample_alpha,
             use_native_resize_op=self._use_native_resize_op,
-            batch_norm_relu=self._batch_norm_relu,
+            batch_norm_activation=self._batch_norm_activation,
             data_format=self._data_format,
             name='resample_{}_1'.format(i),
             is_training=is_training)
@@ -427,7 +461,7 @@ class SpineNet(object):
               block_fn_cand=target_block_fn,
               block_repeats=self._block_repeats,
               activation=self._activation,
-              batch_norm_relu=self._batch_norm_relu,
+              batch_norm_activation=self._batch_norm_activation,
               dropblock=self._dropblock,
               drop_connect_rate=get_drop_connect_rate(
                   self._init_drop_connect_rate, i, len(self._block_specs)),
@@ -476,3 +510,34 @@ class SpineNet(object):
       endpoints = self._build_endpoints(feats, is_training)
 
     return endpoints
+
+
+def spinenet_builder(model_id,
+                     min_level=3,
+                     max_level=7,
+                     block_specs=build_block_specs(),
+                     use_native_resize_op=False,
+                     activation='swish',
+                     batch_norm_activation=nn_ops.BatchNormActivation(
+                         activation='swish'),
+                     init_drop_connect_rate=None,
+                     data_format='channels_last'):
+  """Builds the SpineNet network."""
+  if model_id not in SCALING_MAP:
+    raise ValueError('SpineNet {} is not a valid architecture.'
+                     .format(model_id))
+  scaling_params = SCALING_MAP[model_id]
+  return SpineNet(
+      min_level=min_level,
+      max_level=max_level,
+      block_specs=block_specs,
+      endpoints_num_filters=scaling_params['endpoints_num_filters'],
+      resample_alpha=scaling_params['resample_alpha'],
+      use_native_resize_op=use_native_resize_op,
+      block_repeats=scaling_params['block_repeats'],
+      filter_size_scale=scaling_params['filter_size_scale'],
+      activation=activation,
+      batch_norm_activation=batch_norm_activation,
+      init_drop_connect_rate=init_drop_connect_rate,
+      data_format=data_format)
+

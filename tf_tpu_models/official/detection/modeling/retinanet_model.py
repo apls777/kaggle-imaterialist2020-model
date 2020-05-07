@@ -27,6 +27,7 @@ from modeling import base_model
 from modeling import losses
 from modeling.architecture import factory
 from ops import postprocess_ops
+from utils import benchmark_utils
 
 
 class RetinanetModel(base_model.BaseModel):
@@ -35,20 +36,23 @@ class RetinanetModel(base_model.BaseModel):
   def __init__(self, params):
     super(RetinanetModel, self).__init__(params)
 
-    self._anchor_params = params.anchor
+    self._params = params
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
     self._fpn_fn = factory.multilevel_features_generator(params)
-    self._head_fn = factory.retinanet_head_generator(params.retinanet_head)
+    self._head_fn = factory.retinanet_head_generator(params)
 
     # Loss function.
-    self._cls_loss_fn = losses.RetinanetClassLoss(params.retinanet_loss)
+    self._cls_loss_fn = losses.RetinanetClassLoss(
+        params.retinanet_loss, params.architecture.num_classes)
     self._box_loss_fn = losses.RetinanetBoxLoss(params.retinanet_loss)
     self._box_loss_weight = params.retinanet_loss.box_loss_weight
 
     # Predict function.
     self._generate_detections_fn = postprocess_ops.MultilevelDetectionGenerator(
+        params.architecture.min_level,
+        params.architecture.max_level,
         params.postprocess)
 
   def _build_outputs(self, images, labels, mode):
@@ -56,11 +60,11 @@ class RetinanetModel(base_model.BaseModel):
       anchor_boxes = labels['anchor_boxes']
     else:
       anchor_boxes = anchor.Anchor(
-          self._anchor_params.min_level,
-          self._anchor_params.max_level,
-          self._anchor_params.num_scales,
-          self._anchor_params.aspect_ratios,
-          self._anchor_params.anchor_size,
+          self._params.architecture.min_level,
+          self._params.architecture.max_level,
+          self._params.anchor.num_scales,
+          self._params.anchor.aspect_ratios,
+          self._params.anchor.anchor_size,
           images.get_shape().as_list()[1:3]).multilevel_boxes
 
       batch_size = tf.shape(images)[0]
@@ -78,6 +82,10 @@ class RetinanetModel(base_model.BaseModel):
         'cls_outputs': cls_outputs,
         'box_outputs': box_outputs,
     }
+
+    tf.logging.info('Computing number of FLOPs before NMS...')
+    _, _ = benchmark_utils.compute_model_statistics(
+        images.get_shape().as_list()[0])
 
     if mode != mode_keys.TRAIN:
       detection_results = self._generate_detections_fn(

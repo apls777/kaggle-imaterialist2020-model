@@ -12,18 +12,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""IO utils."""
-
-import os
-
-import tensorflow.compat.v1 as tf
-
-from hyperparameters import params_dict
-
-
-def save_config(params, model_dir):
-  if model_dir:
-    if not tf.gfile.Exists(model_dir):
-      tf.gfile.MakeDirs(model_dir)
-    params_dict.save_params_dict_to_yaml(
-        params, os.path.join(model_dir, 'params.yaml'))

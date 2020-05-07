@@ -14,14 +14,14 @@
 # ==============================================================================
 """Config template to train Mask R-CNN."""
 
-from configs import base_config
+from configs import detection_config
 import sys
 sys.path.insert(0, 'tpu/models')
 from hyperparameters import params_dict
 
 # pylint: disable=line-too-long
 
-MASKRCNN_CFG = params_dict.ParamsDict(base_config.BASE_CFG)
+MASKRCNN_CFG = params_dict.ParamsDict(detection_config.DETECTION_CFG)
 MASKRCNN_CFG.override({
     'type': 'mask_rcnn',
     'eval': {
@@ -30,12 +30,13 @@ MASKRCNN_CFG.override({
     'architecture': {
         'parser': 'maskrcnn_parser',
         'backbone': 'resnet',
+        'min_level': 2,
+        'max_level': 6,
         'multilevel_features': 'fpn',
-        'use_bfloat16': True,
         'include_mask': True,
+        'mask_target_size': 28,
     },
     'maskrcnn_parser': {
-        'use_bfloat16': True,
         'output_size': [1024, 1024],
         'rpn_match_threshold': 0.7,
         'rpn_unmatched_threshold': 0.3,
@@ -46,68 +47,32 @@ MASKRCNN_CFG.override({
         'aug_scale_max': 1.0,
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
-        'include_mask': True,
         'mask_crop_size': 112,
     },
     'anchor': {
-        'min_level': 2,
-        'max_level': 6,
         'num_scales': 1,
         'anchor_size': 8,
     },
-    'fpn': {
-        'min_level': 2,
-        'max_level': 6,
-    },
-    'nasfpn': {
-        'min_level': 2,
-        'max_level': 6,
-    },
     'rpn_head': {
-        'min_level': 2,
-        'max_level': 6,
         'anchors_per_location': 3,
         'num_convs': 2,
         'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': False,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
     },
     'frcnn_head': {
-        # Note that `num_classes` is the total number of classes including
-        # one background classes whose index is 0.
-        'num_classes': 91,
         'num_convs': 0,
         'num_filters': 256,
         'use_separable_conv': False,
         'num_fcs': 2,
         'fc_dims': 1024,
         'use_batch_norm': False,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
     },
     'mrcnn_head': {
-        'num_classes': 91,
-        'mask_target_size': 28,
         'num_convs': 4,
         'num_filters': 256,
         'use_separable_conv': False,
         'use_batch_norm': False,
-        'batch_norm': {
-            'batch_norm_momentum': 0.997,
-            'batch_norm_epsilon': 1e-4,
-            'batch_norm_trainable': True,
-            'use_sync_bn': False,
-        },
     },
     'rpn_score_loss': {
         'rpn_batch_size_per_im': 256,
@@ -141,7 +106,6 @@ MASKRCNN_CFG.override({
     },
     'mask_sampling': {
         'num_mask_samples_per_image': 128,  # Typically = `num_samples_per_image` * `fg_fraction`.
-        'mask_target_size': 28,
     },
     'postprocess': {
         'use_batched_nms': False,
@@ -154,11 +118,5 @@ MASKRCNN_CFG.override({
 
 
 MASKRCNN_RESTRICTIONS = [
-    'architecture.use_bfloat16 == maskrcnn_parser.use_bfloat16',
-    'architecture.include_mask == maskrcnn_parser.include_mask',
-    'anchor.min_level == rpn_head.min_level',
-    'anchor.max_level == rpn_head.max_level',
-    'mrcnn_head.mask_target_size == mask_sampling.mask_target_size',
 ]
-
 # pylint: enable=line-too-long

@@ -30,11 +30,11 @@ from six.moves import range
 import tensorflow.compat.v1 as tf
 
 from configs import factory
-from configs import io
 from dataloader import input_reader
 from dataloader import mode_keys as ModeKeys
 from executor import tpu_executor
 from modeling import model_builder
+from utils import config_utils
 import sys
 sys.path.insert(0, 'tpu/models')
 from hyperparameters import common_hparams_flags
@@ -51,7 +51,7 @@ flags.DEFINE_string(
 
 flags.DEFINE_string(
     'model', default='retinanet',
-    help='Model to run: `retinanet`, `mask_rcnn` or `shapemask`.')
+    help='Support `retinanet`, `mask_rcnn`, `shapemask` and `classification`.')
 
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training.')
@@ -75,6 +75,15 @@ def main(argv):
 
   params = params_dict.override_params_dict(
       params, FLAGS.params_override, is_strict=True)
+  if not FLAGS.use_tpu:
+    params.override({
+        'architecture': {
+            'use_bfloat16': False,
+        },
+        'batch_norm_activation': {
+            'use_sync_bn': False,
+        },
+    }, is_strict=True)
   params.override({
       'platform': {
           'eval_master': FLAGS.eval_master,
@@ -119,7 +128,7 @@ def main(argv):
 
   # Runs the model.
   if FLAGS.mode == 'train':
-    io.save_config(params, params.model_dir)
+    config_utils.save_config(params, params.model_dir)
     executor.train(train_input_fn, params.train.total_steps)
     if FLAGS.eval_after_training:
       executor.evaluate(
@@ -159,7 +168,7 @@ def main(argv):
                      ckpt)
 
   elif FLAGS.mode == 'train_and_eval':
-    io.save_config(params, params.model_dir)
+    config_utils.save_config(params, params.model_dir)
     num_cycles = int(params.train.total_steps / params.eval.num_steps_per_eval)
     for cycle in range(num_cycles):
       logging.info('Start training cycle %d.', cycle)
