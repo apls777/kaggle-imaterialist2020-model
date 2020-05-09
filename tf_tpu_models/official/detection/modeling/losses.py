@@ -349,6 +349,22 @@ class MaskrcnnLoss(object):
           reduction=tf.losses.Reduction.SUM_BY_NONZERO_WEIGHTS)
 
 
+class AttributesLoss(object):
+  """Attributes loss function."""
+
+  def __call__(self, attribute_outputs, attribute_targets, select_class_targets):
+    with tf.name_scope('attributes_loss'):
+      batch_size, num_instances, num_attributes = attribute_outputs.get_shape().as_list()
+      weights = tf.tile(
+          tf.reshape(tf.greater(select_class_targets, 0), [batch_size, num_instances, 1]),
+          [1, 1, num_attributes])
+
+      loss = tf.losses.sigmoid_cross_entropy(attribute_targets, attribute_outputs, weights=weights,
+                                             reduction=tf.losses.Reduction.SUM_BY_NONZERO_WEIGHTS)
+
+      return loss
+
+
 class RetinanetClassLoss(object):
   """RetinaNet class loss."""
 

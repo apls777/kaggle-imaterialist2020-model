@@ -30,9 +30,10 @@ def _get_source_id_from_encoded_image(parsed_tensors):
 class TfExampleDecoder(object):
   """Tensorflow Example proto decoder."""
 
-  def __init__(self, include_mask=False, regenerate_source_id=False):
+  def __init__(self, include_mask=False, regenerate_source_id=False, num_attributes=None):
     self._include_mask = include_mask
     self._regenerate_source_id = regenerate_source_id
+    self._num_attributes = num_attributes
     self._keys_to_features = {
         'image/encoded': tf.FixedLenFeature((), tf.string),
         'image/source_id': tf.FixedLenFeature((), tf.string, ''),
@@ -46,10 +47,16 @@ class TfExampleDecoder(object):
         'image/object/area': tf.VarLenFeature(tf.float32),
         'image/object/is_crowd': tf.VarLenFeature(tf.int64),
     }
+
     if include_mask:
       self._keys_to_features.update({
           'image/object/mask':
               tf.VarLenFeature(tf.string),
+      })
+
+    if num_attributes:
+      self._keys_to_features.update({
+        'image/object/attributes/labels': tf.FixedLenFeature((), tf.string, ''),
       })
 
   def _decode_image(self, parsed_tensors):
@@ -112,6 +119,7 @@ class TfExampleDecoder(object):
         - groundtruth_instance_masks: a float32 tensor of shape
             [None, None, None].
         - groundtruth_instance_masks_png: a string tensor of shape [None].
+        - groundtruth_attributes - an int32 tensor of shape [None, num_attributes]
     """
     parsed_tensors = tf.io.parse_single_example(
         serialized_example, self._keys_to_features)
@@ -163,9 +171,19 @@ class TfExampleDecoder(object):
         'groundtruth_area': areas,
         'groundtruth_boxes': boxes,
     }
+
     if self._include_mask:
       decoded_tensors.update({
           'groundtruth_instance_masks': masks,
           'groundtruth_instance_masks_png': parsed_tensors['image/object/mask'],
       })
+
+    if self._num_attributes:
+      decoded_tensors.update({
+        'groundtruth_attributes': tf.reshape(
+          tf.cast(tf.io.decode_raw(parsed_tensors['image/object/attributes/labels'], tf.bool), tf.float32),
+          shape=(-1, self._num_attributes),
+        ),
+      })
+
     return decoded_tensors

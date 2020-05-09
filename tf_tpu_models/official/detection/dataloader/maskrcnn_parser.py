@@ -46,7 +46,8 @@ class Parser(object):
                include_mask=False,
                mask_crop_size=112,
                use_bfloat16=True,
-               mode=None):
+               mode=None,
+               num_attributes=None):
     """Initializes parameters for parsing annotations in the dataset.
 
     Args:
@@ -89,7 +90,9 @@ class Parser(object):
     self._is_training = (mode == ModeKeys.TRAIN)
 
     self._example_decoder = tf_example_decoder.TfExampleDecoder(
-        include_mask=include_mask)
+        include_mask=include_mask,
+        num_attributes=num_attributes,
+    )
 
     # Anchor.
     self._output_size = output_size
@@ -113,6 +116,9 @@ class Parser(object):
     # Mask.
     self._include_mask = include_mask
     self._mask_crop_size = mask_crop_size
+
+    # Attributes.
+    self._num_attributes = num_attributes
 
     # Device.
     self._use_bfloat16 = use_bfloat16
@@ -179,8 +185,12 @@ class Parser(object):
     """
     classes = data['groundtruth_classes']
     boxes = data['groundtruth_boxes']
+
     if self._include_mask:
       masks = data['groundtruth_instance_masks']
+
+    if self._num_attributes:
+      attributes = data['groundtruth_attributes']
 
     is_crowds = data['groundtruth_is_crowd']
     # Skips annotations with `is_crowd` = True.
@@ -193,8 +203,12 @@ class Parser(object):
             lambda: tf.cast(tf.range(num_groundtrtuhs), tf.int64))
       classes = tf.gather(classes, indices)
       boxes = tf.gather(boxes, indices)
+
       if self._include_mask:
         masks = tf.gather(masks, indices)
+
+      if self._num_attributes:
+        attributes = tf.gather(attributes, indices)
 
     # Gets original image and its size.
     image = data['image']
@@ -286,9 +300,14 @@ class Parser(object):
         boxes, self._max_num_instances, -1)
     labels['gt_classes'] = input_utils.pad_to_fixed_size(
         classes, self._max_num_instances, -1)
+
     if self._include_mask:
       labels['gt_masks'] = input_utils.pad_to_fixed_size(
           masks, self._max_num_instances, -1)
+
+    if self._num_attributes:
+      labels['gt_attributes'] = input_utils.pad_to_fixed_size(
+          attributes, self._max_num_instances, -1)
 
     return image, labels
 

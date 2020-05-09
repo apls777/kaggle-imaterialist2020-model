@@ -293,7 +293,7 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     l2_regularization_loss = self._l2_weight_decay * tf.add_n([
         tf.nn.l2_loss(v) for v in regularization_var_list])
 
-    self.add_scalar_summary('l2_regularization_loss', l2_regularization_loss)
+    self.add_scalar_summary('losses/l2_regularization_loss', l2_regularization_loss)
 
     total_loss = model_loss + l2_regularization_loss
 

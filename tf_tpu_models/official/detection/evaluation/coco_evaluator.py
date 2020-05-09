@@ -36,6 +36,8 @@ import json
 import tempfile
 from absl import logging
 import numpy as np
+from evaluation.attributes import evaluate_attributes
+from evaluation.cocoeval import COCOeval
 from pycocotools import cocoeval
 import six
 from six.moves import range
@@ -52,7 +54,9 @@ class COCOEvaluator(object):
                annotation_file,
                include_mask,
                need_rescale_bboxes=True,
-               per_category_metrics=False):
+               per_category_metrics=False,
+               include_attributes=False,
+               use_eval_image_sizes=False):
     """Constructs COCO evaluation class.
 
     The class provides the interface to metrics_fn in TPUEstimator. The
@@ -84,7 +88,9 @@ class COCOEvaluator(object):
           annotation_file=local_val_json)
     self._annotation_file = annotation_file
     self._include_mask = include_mask
+    self._include_attributes = include_attributes
     self._per_category_metrics = per_category_metrics
+    self._use_eval_image_sizes = use_eval_image_sizes
     self._metric_names = [
         'AP', 'AP50', 'AP75', 'APs', 'APm', 'APl', 'ARmax1', 'ARmax10',
         'ARmax100', 'ARs', 'ARm', 'ARl'
@@ -96,14 +102,17 @@ class COCOEvaluator(object):
     self._need_rescale_bboxes = need_rescale_bboxes
     if self._need_rescale_bboxes:
       self._required_prediction_fields.append('image_info')
+
     self._required_groundtruth_fields = [
         'source_id', 'height', 'width', 'classes', 'boxes'
     ]
     if self._include_mask:
-      mask_metric_names = ['mask_' + x for x in self._metric_names]
-      self._metric_names.extend(mask_metric_names)
       self._required_prediction_fields.extend(['detection_masks'])
       self._required_groundtruth_fields.extend(['masks'])
+
+    if self._include_attributes:
+      self._required_prediction_fields.extend(['detection_attributes'])
+      self._required_groundtruth_fields.extend(['attributes'])
 
     self.reset()
 
@@ -145,77 +154,67 @@ class COCOEvaluator(object):
     else:
       logging.info('Using annotation file: %s', self._annotation_file)
       coco_gt = self._coco_gt
-    coco_predictions = coco_utils.convert_predictions_to_coco_annotations(
-        self._predictions)
+
+    logging.info('Loading predictions...')
+
+    eval_image_sizes = {}
+    if self._use_eval_image_sizes:
+      for image in coco_gt.dataset['images']:
+        eval_image_sizes[image['id']] = (image['height'], image['width'])
+
+    coco_predictions = coco_utils.convert_predictions_to_coco_annotations(self._predictions, eval_image_sizes)
     coco_dt = coco_gt.loadRes(predictions=coco_predictions)
     image_ids = [ann['image_id'] for ann in coco_predictions]
 
-    coco_eval = cocoeval.COCOeval(coco_gt, coco_dt, iouType='bbox')
+    logging.info('Evaluating bboxes...')
+
+    coco_eval = COCOeval(coco_gt, coco_dt, iouType='bbox')
     coco_eval.params.imgIds = image_ids
     coco_eval.evaluate()
     coco_eval.accumulate()
     coco_eval.summarize()
-    coco_metrics = coco_eval.stats
+
+    if self._per_category_metrics:
+        coco_eval.summarize_per_category()
+
+    metrics_dict = self._get_metrics_dict(coco_eval, 'bbox')
 
     if self._include_mask:
-      mcoco_eval = cocoeval.COCOeval(coco_gt, coco_dt, iouType='segm')
+      logging.info('Evaluating masks...')
+
+      mcoco_eval = COCOeval(coco_gt, coco_dt, iouType='segm')
       mcoco_eval.params.imgIds = image_ids
       mcoco_eval.evaluate()
       mcoco_eval.accumulate()
       mcoco_eval.summarize()
-      mask_coco_metrics = mcoco_eval.stats
 
-    if self._include_mask:
-      metrics = np.hstack((coco_metrics, mask_coco_metrics))
-    else:
-      metrics = coco_metrics
+      if self._per_category_metrics:
+          mcoco_eval.summarize_per_category()
+
+      mask_metrics = self._get_metrics_dict(mcoco_eval, 'mask')
+      metrics_dict.update(mask_metrics)
+
+    if self._include_attributes:
+      logging.info('Evaluating attributes...')
+      attribute_metrics = evaluate_attributes(coco_gt.dataset['annotations'], coco_dt.dataset['annotations'])
+      metrics_dict.update(attribute_metrics)
 
     # Cleans up the internal variables in order for a fresh eval next time.
     self.reset()
 
+    return metrics_dict
+
+  def _get_metrics_dict(self, coco_eval: COCOeval, prefix: str):
     metrics_dict = {}
     for i, name in enumerate(self._metric_names):
-      metrics_dict[name] = metrics[i].astype(np.float32)
+      metrics_dict['%s_performance/%s' % (prefix, name)] = coco_eval.stats[i].astype(np.float32)
 
-    # Adds metrics per category.
-    if self._per_category_metrics and hasattr(coco_eval, 'category_stats'):
-      for category_index, category_id in enumerate(coco_eval.params.catIds):
-        metrics_dict['Precision mAP ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[0][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory@50IoU/{}'.format(
-            category_id)] = coco_eval.category_stats[1][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory@75IoU/{}'.format(
-            category_id)] = coco_eval.category_stats[2][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory (small) /{}'.format(
-            category_id)] = coco_eval.category_stats[3][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory (medium) /{}'.format(
-            category_id)] = coco_eval.category_stats[4][category_index].astype(
-                np.float32)
-        metrics_dict['Precision mAP ByCategory (large) /{}'.format(
-            category_id)] = coco_eval.category_stats[5][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR@1 ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[6][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR@10 ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[7][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR@100 ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[8][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR (small) ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[9][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR (medium) ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[10][category_index].astype(
-                np.float32)
-        metrics_dict['Recall AR (large) ByCategory/{}'.format(
-            category_id)] = coco_eval.category_stats[11][category_index].astype(
-                np.float32)
+      # Adds metrics per category.
+      if self._per_category_metrics and hasattr(coco_eval, 'category_stats'):
+        for category_index, category_id in enumerate(coco_eval.params.catIds):
+          metrics_dict['%s_%s/cat_%s' % (prefix, name, category_id)] = \
+            coco_eval.category_stats[0][category_index].astype(np.float32)
+
     return metrics_dict
 
   def _process_predictions(self, predictions):

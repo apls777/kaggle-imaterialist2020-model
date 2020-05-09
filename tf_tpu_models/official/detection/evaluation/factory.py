@@ -33,6 +33,13 @@ def evaluator_generator(params):
         annotation_file=params.val_json_file,
         include_mask=True,
         per_category_metrics=params.per_category_metrics)
+  elif params.type == 'box_mask_and_attributes_no_rescale':
+    evaluator = coco_evaluator.COCOEvaluator(
+        annotation_file=params.val_json_file,
+        include_mask=True,
+        per_category_metrics=params.per_category_metrics,
+        include_attributes=True,
+        use_eval_image_sizes=True)
   elif params.type == 'shapemask_box_and_mask':
     evaluator = coco_evaluator.ShapeMaskCOCOEvaluator(
         mask_eval_class=params.mask_eval_class,

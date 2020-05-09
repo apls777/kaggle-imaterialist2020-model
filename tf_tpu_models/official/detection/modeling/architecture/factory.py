@@ -191,6 +191,22 @@ def mask_rcnn_head_generator(params):
           params.batch_norm_activation))
 
 
+def attributes_head_generator(params):
+  """Generator function for attributes head architecture."""
+  head_params = params.frcnn_head
+  return heads.AttributesHead(
+      params.architecture.num_attributes,
+      head_params.num_convs,
+      head_params.num_filters,
+      head_params.use_separable_conv,
+      head_params.num_fcs,
+      head_params.fc_dims,
+      params.batch_norm_activation.activation,
+      head_params.use_batch_norm,
+      batch_norm_activation=batch_norm_activation_generator(
+          params.batch_norm_activation))
+
+
 def shapeprior_head_generator(params):
   """Generator function for shape prior head architecture."""
   head_params = params.shapemask_head

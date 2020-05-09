@@ -41,6 +41,7 @@ class MaskrcnnModel(base_model.BaseModel):
     self._params = params
 
     self._include_mask = params.architecture.include_mask
+    self._include_attributes = (params.architecture.num_attributes is not None)
 
     # Architecture generators.
     self._backbone_fn = factory.backbone_generator(params)
@@ -53,16 +54,24 @@ class MaskrcnnModel(base_model.BaseModel):
         params.mask_sampling.num_mask_samples_per_image)
 
     self._frcnn_head_fn = factory.fast_rcnn_head_generator(params)
+
     if self._include_mask:
       self._mrcnn_head_fn = factory.mask_rcnn_head_generator(params)
+
+    if self._include_attributes:
+      self._attributes_head_fn = factory.attributes_head_generator(params)
 
     # Loss function.
     self._rpn_score_loss_fn = losses.RpnScoreLoss(params.rpn_score_loss)
     self._rpn_box_loss_fn = losses.RpnBoxLoss(params.rpn_box_loss)
     self._frcnn_class_loss_fn = losses.FastrcnnClassLoss()
     self._frcnn_box_loss_fn = losses.FastrcnnBoxLoss(params.frcnn_box_loss)
+
     if self._include_mask:
       self._mask_loss_fn = losses.MaskrcnnLoss()
+
+    if self._include_attributes:
+      self._attributes_loss_fn = losses.AttributesLoss()
 
     self._generate_detections_fn = postprocess_ops.GenericDetectionGenerator(
         params.postprocess)
@@ -144,7 +153,7 @@ class MaskrcnnModel(base_model.BaseModel):
       return model_outputs
 
     if is_training:
-      rpn_rois, classes, mask_targets = self._sample_masks_fn(
+      rpn_rois, classes, mask_targets, gather_nd_gt_indices = self._sample_masks_fn(
           rpn_rois, matched_gt_boxes, matched_gt_classes, matched_gt_indices,
           labels['gt_masks'])
       mask_targets = tf.stop_gradient(mask_targets)
@@ -173,6 +182,21 @@ class MaskrcnnModel(base_model.BaseModel):
           'detection_masks': tf.nn.sigmoid(mask_outputs)
       })
 
+    if not self._include_attributes:
+      return model_outputs
+
+    attribute_outputs = self._attributes_head_fn(mask_roi_features, is_training)
+
+    if is_training:
+      attribute_targets = tf.gather_nd(labels['gt_attributes'], gather_nd_gt_indices)  # [batch, K, num_attributes]
+
+      model_outputs.update({
+          'attribute_outputs': attribute_outputs,
+          'attribute_targets': attribute_targets,
+      })
+    else:
+      model_outputs['detection_attributes'] = tf.nn.sigmoid(attribute_outputs)
+
     return model_outputs
 
   def build_losses(self, outputs, labels):
@@ -196,16 +220,29 @@ class MaskrcnnModel(base_model.BaseModel):
     else:
       mask_loss = 0.0
 
-    model_loss = (rpn_score_loss + rpn_box_loss + frcnn_class_loss
-                  + frcnn_box_loss + mask_loss)
+    if self._include_attributes:
+      attributes_loss = self._attributes_loss_fn(
+          outputs['attribute_outputs'],
+          outputs['attribute_targets'],
+          outputs['sampled_class_targets'])
+    else:
+      attributes_loss = 0.0
 
-    self.add_scalar_summary('rpn_score_loss', rpn_score_loss)
-    self.add_scalar_summary('rpn_box_loss', rpn_box_loss)
-    self.add_scalar_summary('fast_rcnn_class_loss', frcnn_class_loss)
-    self.add_scalar_summary('fast_rcnn_box_loss', frcnn_box_loss)
+    model_loss = (rpn_score_loss + rpn_box_loss + frcnn_class_loss
+                  + frcnn_box_loss + mask_loss + attributes_loss)
+
+    self.add_scalar_summary('losses/rpn_score_loss', rpn_score_loss)
+    self.add_scalar_summary('losses/rpn_box_loss', rpn_box_loss)
+    self.add_scalar_summary('losses/fast_rcnn_class_loss', frcnn_class_loss)
+    self.add_scalar_summary('losses/fast_rcnn_box_loss', frcnn_box_loss)
+
     if self._include_mask:
-      self.add_scalar_summary('mask_loss', mask_loss)
-    self.add_scalar_summary('model_loss', model_loss)
+      self.add_scalar_summary('losses/mask_loss', mask_loss)
+
+    if self._include_attributes:
+      self.add_scalar_summary('losses/attributes_loss', attributes_loss)
+
+    self.add_scalar_summary('losses/model_loss', model_loss)
 
     return model_loss
 
@@ -220,9 +257,15 @@ class MaskrcnnModel(base_model.BaseModel):
         'pred_detection_classes': outputs['detection_classes'],
         'pred_detection_scores': outputs['detection_scores'],
     }
+
     if self._include_mask:
       predictions.update({
           'pred_detection_masks': outputs['detection_masks'],
+      })
+
+    if self._include_attributes:
+      predictions.update({
+          'pred_detection_attributes': outputs['detection_attributes'],
       })
 
     if 'groundtruths' in labels:

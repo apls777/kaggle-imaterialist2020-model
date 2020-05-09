@@ -291,7 +291,7 @@ def sample_and_crop_foreground_masks(candidate_rois,
         foreground_masks, foreground_boxes, foreground_rois, mask_target_size,
         sample_offset=0.5)
 
-    return foreground_rois, foreground_classes, cropped_foreground_masks
+    return foreground_rois, foreground_classes, cropped_foreground_masks, gather_nd_gt_indices
 
 
 class ROISampler(object):
@@ -389,7 +389,7 @@ class MaskSampler(object):
         [batch_size, K, mask_target_size, mask_target_size] storing the
         cropped foreground masks used for training.
     """
-    foreground_rois, foreground_classes, cropped_foreground_masks = (
+    foreground_rois, foreground_classes, cropped_foreground_masks, gather_nd_gt_indices = (
         sample_and_crop_foreground_masks(
             candidate_rois,
             candidate_gt_boxes,
@@ -398,4 +398,4 @@ class MaskSampler(object):
             gt_masks,
             self._num_mask_samples_per_image,
             self._mask_target_size))
-    return foreground_rois, foreground_classes, cropped_foreground_masks
+    return foreground_rois, foreground_classes, cropped_foreground_masks, gather_nd_gt_indices

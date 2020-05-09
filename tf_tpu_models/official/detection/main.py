@@ -35,8 +35,7 @@ from dataloader import mode_keys as ModeKeys
 from executor import tpu_executor
 from modeling import model_builder
 from utils import config_utils
-import sys
-sys.path.insert(0, 'tpu/models')
+
 from hyperparameters import common_hparams_flags
 from hyperparameters import common_tpu_flags
 from hyperparameters import params_dict
@@ -147,7 +146,7 @@ def main(argv):
         timeout=params.eval.eval_timeout,
         timeout_fn=terminate_eval):
       # Terminates eval job when final checkpoint is reached.
-      current_step = int(six.ensure_str(os.path.basename(ckpt)).split('-')[1])
+      current_step = int(os.path.basename(ckpt).split('-')[1])
 
       logging.info('Starting to evaluate.')
       try:

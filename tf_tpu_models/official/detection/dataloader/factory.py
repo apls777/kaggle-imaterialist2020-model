@@ -77,7 +77,8 @@ def parser_generator(params, mode):
         include_mask=params.architecture.include_mask,
         mask_crop_size=parser_params.mask_crop_size,
         use_bfloat16=params.architecture.use_bfloat16,
-        mode=mode)
+        mode=mode,
+        num_attributes=params.architecture.num_attributes)
   elif params.architecture.parser == 'shapemask_parser':
     anchor_params = params.anchor
     parser_params = params.shapemask_parser

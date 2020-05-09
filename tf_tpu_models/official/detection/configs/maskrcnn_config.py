@@ -35,6 +35,7 @@ MASKRCNN_CFG.override({
         'multilevel_features': 'fpn',
         'include_mask': True,
         'mask_target_size': 28,
+        'num_attributes': None,
     },
     'maskrcnn_parser': {
         'output_size': [1024, 1024],
