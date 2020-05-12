@@ -5,6 +5,7 @@ project:
         - .git/*
         - .idea/*
         - '*/__pycache__/*'
+        - training/*
 
 container:
   projectDir: /workspace/project
@@ -65,6 +66,40 @@ scripts:
       --config_file=configs/mask_rcnn/{{CONFIG}}.yaml
     else
       echo "MODEL, CONFIG, TPU and MODE parameters are required."
+    fi
+
+  train-spinenet: |
+    if [ -n "{{MODEL}}" ] && [ -n "{{CONFIG}}" ] && [ -n "{{TPU}}" ] && [ -n "{{MODE}}" ]; then
+      export STORAGE_BUCKET=gs://kaggle-imaterialist2020-data-europe-west4
+      export MODEL_DIR=${STORAGE_BUCKET}/training/{{MODEL}}
+
+      PYTHONPATH=tf_tpu_models python tf_tpu_models/official/detection/main.py \
+        --model="mask_rcnn" \
+        --model_dir=${MODEL_DIR} \
+        --mode={{MODE}} \
+        --eval_after_training=False \
+        --config_file=configs/spinenet/{{CONFIG}}.yaml \
+        --use_tpu=True \
+        --tpu={{TPU}}
+    else
+      echo "MODEL, CONFIG, TPU and MODE parameters are required."
+    fi
+
+  submit-spinenet: |
+    if [ -n "{{MODEL}}" ] && [ -n "{{CONFIG}}" ] && [ -n "{{TPU}}" ] && [ -n "{{STEP}}" ]; then
+      export STORAGE_BUCKET=gs://kaggle-imaterialist2020-data-europe-west4
+      export MODEL_DIR=${STORAGE_BUCKET}/training/{{MODEL}}
+
+      PYTHONPATH=tf_tpu_models python tf_tpu_models/official/detection/main.py \
+        --model="mask_rcnn" \
+        --model_dir=${MODEL_DIR} \
+        --mode=submit \
+        --submit_checkpoint_step={{STEP}} \
+        --config_file=configs/spinenet/{{CONFIG}}.yaml \
+        --use_tpu=True \
+        --tpu={{TPU}}
+    else
+      echo "MODEL, CONFIG, TPU and STEP parameters are required."
     fi
 
   submit: |

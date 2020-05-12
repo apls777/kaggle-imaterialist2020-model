@@ -212,6 +212,7 @@ def cutout(image, pad_size, replace=0):
   """
   image_height = tf.shape(image)[0]
   image_width = tf.shape(image)[1]
+  num_channels = tf.shape(image)[2]
 
   # Sample the center location in the image where the zero mask will be applied.
   cutout_center_height = tf.random_uniform(
@@ -234,11 +235,14 @@ def cutout(image, pad_size, replace=0):
       tf.zeros(cutout_shape, dtype=image.dtype),
       padding_dims, constant_values=1)
   mask = tf.expand_dims(mask, -1)
-  mask = tf.tile(mask, [1, 1, 3])
+  mask = tf.tile(mask, [1, 1, num_channels])
+  replace = tf.concat([tf.cast(replace, dtype=image.dtype), tf.zeros([num_channels - 3], dtype=image.dtype)], axis=0)
+
   image = tf.where(
       tf.equal(mask, 0),
       tf.ones_like(image, dtype=image.dtype) * replace,
       image)
+
   return image
 
 
@@ -261,8 +265,12 @@ def solarize_add(image, addition=0, threshold=128):
 
 def color(image, factor):
   """Equivalent of PIL Color."""
+  image, masks = _split_image_and_masks(image)
+
   degenerate = tf.image.grayscale_to_rgb(tf.image.rgb_to_grayscale(image))
-  return blend(degenerate, image, factor)
+  image = blend(degenerate, image, factor)
+
+  return _concat_image_and_masks(image, masks)
 
 
 def contrast(image, factor):
@@ -502,7 +510,7 @@ def _scale_bbox_only_op_probability(prob):
   return prob / 3.0
 
 
-def _apply_bbox_augmentation(image, bbox, augmentation_func, *args):
+def _apply_bbox_augmentation(image, bbox, bbox_idx, augmentation_func, *args):
   """Applies augmentation_func to the subsection of image indicated by bbox.
 
   Args:
@@ -518,6 +526,9 @@ def _apply_bbox_augmentation(image, bbox, augmentation_func, *args):
     A modified version of image, where the bbox location in the image will
     have `ugmentation_func applied to it.
   """
+  image, masks = _split_image_and_masks(image)
+  image_with_mask = tf.concat([image, masks[:, :, bbox_idx:(bbox_idx + 1)]], axis=2)
+
   image_height = tf.to_float(tf.shape(image)[0])
   image_width = tf.to_float(tf.shape(image)[1])
   min_y = tf.to_int32(image_height * bbox[0])
@@ -532,7 +543,7 @@ def _apply_bbox_augmentation(image, bbox, augmentation_func, *args):
   max_x = tf.minimum(max_x, image_width - 1)
 
   # Get the sub-tensor that is the image within the bounding box region.
-  bbox_content = image[min_y:max_y + 1, min_x:max_x + 1, :]
+  bbox_content = image_with_mask[min_y:max_y + 1, min_x:max_x + 1, :]
 
   # Apply the augmentation function to the bbox portion of the image.
   augmented_bbox_content = augmentation_func(bbox_content, *args)
@@ -553,7 +564,15 @@ def _apply_bbox_augmentation(image, bbox, augmentation_func, *args):
                         [0, 0]],
                        constant_values=1)
   # Replace the old bbox content with the new augmented content.
-  image = image * mask_tensor + augmented_bbox_content
+  image_with_mask = image_with_mask * mask_tensor + augmented_bbox_content
+
+  image = tf.concat([
+    image_with_mask[:, :, :3],
+    masks[:, :, :bbox_idx],
+    image_with_mask[:, :, 3:4],
+    masks[:, :, (bbox_idx + 1):],
+  ], axis=2)
+
   return image
 
 
@@ -571,7 +590,7 @@ def _concat_bbox(bbox, bboxes):
   return bboxes
 
 
-def _apply_bbox_augmentation_wrapper(image, bbox, new_bboxes, prob,
+def _apply_bbox_augmentation_wrapper(image, bbox, bbox_idx, new_bboxes, prob,
                                      augmentation_func, func_changes_bbox,
                                      *args):
   """Applies _apply_bbox_augmentation with probability prob.
@@ -603,14 +622,16 @@ def _apply_bbox_augmentation_wrapper(image, bbox, new_bboxes, prob,
   should_apply_op = tf.cast(
       tf.floor(tf.random_uniform([], dtype=tf.float32) + prob), tf.bool)
   if func_changes_bbox:
-    augmented_image, bbox = tf.cond(
-        should_apply_op,
-        lambda: augmentation_func(image, bbox, *args),
-        lambda: (image, bbox))
+    # TODO: make it working with masks
+    # augmented_image, bbox = tf.cond(
+    #     should_apply_op,
+    #     lambda: augmentation_func(image, bbox, *args),
+    #     lambda: (image, bbox))
+    raise NotImplementedError
   else:
     augmented_image = tf.cond(
         should_apply_op,
-        lambda: _apply_bbox_augmentation(image, bbox, augmentation_func, *args),
+        lambda: _apply_bbox_augmentation(image, bbox, bbox_idx, augmentation_func, *args),
         lambda: image)
   new_bboxes = _concat_bbox(bbox, new_bboxes)
   return augmented_image, new_bboxes
@@ -655,8 +676,8 @@ def _apply_multi_bbox_augmentation(image, bboxes, prob, aug_func,
 
   # pylint:disable=g-long-lambda
   # pylint:disable=line-too-long
-  wrapped_aug_func = lambda _image, bbox, _new_bboxes: _apply_bbox_augmentation_wrapper(
-      _image, bbox, _new_bboxes, prob, aug_func, func_changes_bbox, *args)
+  wrapped_aug_func = lambda _image, bbox, bbox_idx, _new_bboxes: _apply_bbox_augmentation_wrapper(
+      _image, bbox, bbox_idx, _new_bboxes, prob, aug_func, func_changes_bbox, *args)
   # pylint:enable=g-long-lambda
   # pylint:enable=line-too-long
 
@@ -671,7 +692,14 @@ def _apply_multi_bbox_augmentation(image, bboxes, prob, aug_func,
   # Shuffle the bboxes so that the augmentation order is not deterministic if
   # we are not changing the bboxes with aug_func.
   if not func_changes_bbox:
-    loop_bboxes = tf.random.shuffle(bboxes)
+    # shuffle bboxes
+    bbox_indices = tf.random.shuffle(tf.range(num_bboxes))
+    loop_bboxes = tf.gather(bboxes, bbox_indices)
+
+    # align the order of the masks with the shuffled bboxes
+    image, masks = _split_image_and_masks(image)
+    masks = tf.gather(masks, bbox_indices, axis=-1)
+    image = _concat_image_and_masks(image, masks)
   else:
     loop_bboxes = bboxes
 
@@ -681,6 +709,7 @@ def _apply_multi_bbox_augmentation(image, bboxes, prob, aug_func,
   body = lambda _idx, _images_and_bboxes: [
       _idx + 1, wrapped_aug_func(_images_and_bboxes[0],
                                  loop_bboxes[_idx],
+                                 idx,
                                  _images_and_bboxes[1])]
   # pylint:enable=g-long-lambda
 
@@ -1103,6 +1132,8 @@ def autocontrast(image):
 
 def sharpness(image, factor):
   """Implements Sharpness function from PIL using TF ops."""
+  image, masks = _split_image_and_masks(image)
+
   orig_image = image
   image = tf.cast(image, tf.float32)
   # Make image 4D for conv operation.
@@ -1127,11 +1158,14 @@ def sharpness(image, factor):
   result = tf.where(tf.equal(padded_mask, 1), padded_degenerate, orig_image)
 
   # Blend the final result.
-  return blend(result, orig_image, factor)
+  image = blend(result, orig_image, factor)
 
+  return _concat_image_and_masks(image, masks)
 
 def equalize(image):
   """Implements Equalize function from PIL using TF ops."""
+  image, masks = _split_image_and_masks(image)
+
   def scale_channel(im, c):
     """Scale the data in the channel to implement equalize."""
     im = tf.cast(im[:, :, c], tf.int32)
@@ -1167,6 +1201,9 @@ def equalize(image):
   s2 = scale_channel(image, 1)
   s3 = scale_channel(image, 2)
   image = tf.stack([s1, s2, s3], 2)
+
+  image = _concat_image_and_masks(image, masks)
+
   return image
 
 
@@ -1196,6 +1233,11 @@ def unwrap(image, replace):
   Returns:
     image: A 3D image Tensor with 3 channels.
   """
+  # split image and masks and restore alpha channel
+  image, masks = _split_image_and_masks(image)
+  image = tf.concat([image, masks[:, :, -1:]], axis=2)
+  masks = masks[:, :, :-1]
+
   image_shape = tf.shape(image)
   # Flatten the spatial dimensions.
   flattened_image = tf.reshape(image, [-1, image_shape[2]])
@@ -1213,6 +1255,10 @@ def unwrap(image, replace):
 
   image = tf.reshape(flattened_image, image_shape)
   image = tf.slice(image, [0, 0, 0], [image_shape[0], image_shape[1], 3])
+
+  # concat image and masks back
+  image = _concat_image_and_masks(image, masks)
+
   return image
 
 
@@ -1429,6 +1475,17 @@ def _bbox_cutout_level_to_arg(level, hparams):
           hparams.cutout_bbox_replace_with_mean)
 
 
+def _split_image_and_masks(image):
+    masks = image[:, :, 3:]
+    image = image[:, :, :3]
+
+    return image, masks
+
+
+def _concat_image_and_masks(image, masks):
+    return tf.concat([image, masks], axis=2)
+
+
 def level_to_arg(hparams):
   return {
       'AutoContrast': lambda level: (),
@@ -1623,3 +1680,35 @@ def distort_image_with_autoaugment(image, bboxes, augmentation_name):
       translate_bbox_const=120)
 
   return build_and_apply_nas_policy(policy, image, bboxes, augmentation_hparams)
+
+
+def distort_image_and_masks_with_autoaugment(image, bboxes, masks, augmentation_name):
+    """Applies the AutoAugment policy to `image`, `bboxes` and `masks`.
+
+    Args:
+      image: `Tensor` of shape [height, width, 3] representing an image.
+      bboxes: `Tensor` of shape [N, 4] representing ground truth boxes that are
+        normalized between [0, 1].
+      masks: rank 3 float32 tensor with shape
+        [num_instances, height, width] containing instance masks. The masks
+        are of the same height, width as the input `image`.
+      augmentation_name: The name of the AutoAugment policy to use. The available
+        options are `v0`, `v1`, `v2`, `v3` and `test`. `v0` is the policy used for
+        all of the results in the paper and was found to achieve the best results
+        on the COCO dataset. `v1`, `v2` and `v3` are additional good policies
+        found on the COCO dataset that have slight variation in what operations
+        were used during the search procedure along with how many operations are
+        applied in parallel to a single image (2 vs 3).
+
+    Returns:
+      A tuple containing the augmented versions of `image`, `bboxes` and `masks`.
+    """
+    masks = tf.cast(tf.greater(masks, 0), tf.uint8) * 255
+    masks = tf.transpose(masks, [1, 2, 0])
+    image = tf.concat([image, masks], axis=2)
+
+    image, boxes = distort_image_with_autoaugment(image, bboxes, augmentation_name)
+    masks = tf.transpose(tf.cast(tf.greater(image[:, :, 3:], 128), tf.float32), [2, 0, 1])
+    image = image[:, :, :3]
+
+    return image, boxes, masks

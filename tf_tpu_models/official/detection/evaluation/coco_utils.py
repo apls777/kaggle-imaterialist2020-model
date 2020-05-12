@@ -25,6 +25,7 @@ from absl import logging
 
 import numpy as np
 from PIL import Image
+from evaluation.submission import get_new_image_size
 from tqdm import tqdm
 
 import matplotlib
@@ -115,7 +116,8 @@ class COCOWrapper(coco.COCO):
     return res
 
 
-def convert_predictions_to_coco_annotations(predictions, eval_image_sizes: dict = None):
+def convert_predictions_to_coco_annotations(predictions, eval_image_sizes: dict = None, output_image_size: int = None,
+                                            encode_mask_fn=None, score_threshold=0.05):
   """Converts a batch of predictions to annotations in COCO format.
 
   Args:
@@ -144,6 +146,7 @@ def convert_predictions_to_coco_annotations(predictions, eval_image_sizes: dict 
   batch_size = predictions['source_id'][0].shape[0]
   max_num_detections = predictions['detection_classes'][0].shape[1]
   use_outer_box = 'detection_outer_boxes' in predictions
+  encode_mask_fn = (lambda x: mask_api.encode(np.asfortranarray(x))) if encode_mask_fn is None else encode_mask_fn
 
   for i in tqdm(range(num_batches), total=num_batches):
     predictions['detection_boxes'][i] = box_utils.yxyx_to_xywh(
@@ -158,32 +161,40 @@ def convert_predictions_to_coco_annotations(predictions, eval_image_sizes: dict 
     for j in range(batch_size):
       image_id = predictions['source_id'][i][j]
       orig_image_size = predictions['image_info'][i][j, 0]
-      eval_image_size = eval_image_sizes[image_id] if eval_image_sizes else orig_image_size
+
+      if eval_image_sizes:
+        eval_image_size = eval_image_sizes[image_id] if eval_image_sizes else orig_image_size
+      elif output_image_size:
+        eval_image_size = get_new_image_size(orig_image_size, output_image_size)
+      else:
+        eval_image_size = orig_image_size
+
       eval_scale = orig_image_size[0] / eval_image_size[0]
+
+      bbox_indices = np.argwhere(predictions['detection_scores'][i][j] >= score_threshold).flatten()
 
       if 'detection_masks' in predictions:
         image_masks = mask_utils.paste_instance_masks(
-            predictions['detection_masks'][i][j],
-            mask_boxes[i][j].astype(np.float32) / eval_scale,
+            predictions['detection_masks'][i][j, bbox_indices],
+            mask_boxes[i][j, bbox_indices].astype(np.float32) / eval_scale,
             int(eval_image_size[0]),
             int(eval_image_size[1]))
         binary_masks = (image_masks > 0.0).astype(np.uint8)
-        encoded_masks = [
-            mask_api.encode(np.asfortranarray(binary_mask))
-            for binary_mask in list(binary_masks)]
+        encoded_masks = [encode_mask_fn(binary_mask) for binary_mask in list(binary_masks)]
 
-      for k in range(max_num_detections):
-        ann = {}
-        ann['image_id'] = image_id
-        ann['category_id'] = predictions['detection_classes'][i][j, k]
-        ann['bbox'] = predictions['detection_boxes'][i][j, k].astype(np.float32) / eval_scale
-        ann['score'] = predictions['detection_scores'][i][j, k]
+      for m, k in enumerate(bbox_indices):
+        ann = {
+          'image_id': int(image_id),
+          'category_id': int(predictions['detection_classes'][i][j, k]),
+          'bbox': (predictions['detection_boxes'][i][j, k].astype(np.float32) / eval_scale).tolist(),
+          'score': float(predictions['detection_scores'][i][j, k]),
+        }
 
         if 'detection_masks' in predictions:
-          ann['segmentation'] = encoded_masks[k]
+          ann['segmentation'] = encoded_masks[m]
 
         if 'detection_attributes' in predictions:
-          ann['attribute_probabilities'] = predictions['detection_attributes'][i][j, k]
+          ann['attribute_probabilities'] = predictions['detection_attributes'][i][j, k].tolist()
 
         coco_predictions.append(ann)
 

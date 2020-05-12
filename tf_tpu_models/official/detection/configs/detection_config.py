@@ -41,6 +41,7 @@ DETECTION_CFG.override({
         'use_json_file': True,
         'val_json_file': '',
         'per_category_metrics': False,
+        'score_threshold': 0.05,
     },
     'anchor': {
         'num_scales': 3,

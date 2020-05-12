@@ -15,7 +15,7 @@
 """Data parser and processing for Mask R-CNN."""
 
 import tensorflow.compat.v1 as tf
-
+from absl import logging
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
 from dataloader import tf_example_decoder
@@ -41,6 +41,8 @@ class Parser(object):
                aug_rand_hflip=False,
                aug_scale_min=1.0,
                aug_scale_max=1.0,
+               use_autoaugment=False,
+               autoaugment_policy_name='v0',
                skip_crowd_during_training=True,
                max_num_instances=100,
                include_mask=False,
@@ -74,6 +76,10 @@ class Parser(object):
         data augmentation during training.
       aug_scale_max: `float`, the maximum scale applied to `output_size` for
         data augmentation during training.
+      use_autoaugment: `bool`, if True, use the AutoAugment augmentation policy
+        during training.
+      autoaugment_policy_name: `string` that specifies the name of the
+        AutoAugment policy that will be used during training.
       skip_crowd_during_training: `bool`, if True, skip annotations labeled with
         `is_crowd` equals to 1.
       max_num_instances: `int` number of maximum number of instances in an
@@ -113,6 +119,10 @@ class Parser(object):
     self._aug_scale_min = aug_scale_min
     self._aug_scale_max = aug_scale_max
 
+    # Data Augmentation with AutoAugment.
+    self._use_autoaugment = use_autoaugment
+    self._autoaugment_policy_name = autoaugment_policy_name
+
     # Mask.
     self._include_mask = include_mask
     self._mask_crop_size = mask_crop_size
@@ -145,7 +155,7 @@ class Parser(object):
         or ModeKeys.PREDICT_WITH_GT.
     """
     with tf.name_scope('parser'):
-      data = self._example_decoder.decode(value)
+      data = self._example_decoder.decode(value, self._max_num_instances)
       return self._parse_fn(data)
 
   def _parse_train_data(self, data):
@@ -212,6 +222,19 @@ class Parser(object):
 
     # Gets original image and its size.
     image = data['image']
+
+    # NOTE: The autoaugment method works best when used alongside the standard
+    # horizontal flipping of images along with size jittering and normalization.
+    if self._use_autoaugment:
+      try:
+        from utils import autoaugment_utils  # pylint: disable=g-import-not-at-top
+      except ImportError as e:
+        logging.exception('Autoaugment is not supported in TF 2.x.')
+        raise e
+
+      image, boxes, masks = autoaugment_utils.distort_image_and_masks_with_autoaugment(
+          image, boxes, masks, self._autoaugment_policy_name)
+
     image_shape = tf.shape(image)[0:2]
 
     # Normalizes image with mean and std pixel values.

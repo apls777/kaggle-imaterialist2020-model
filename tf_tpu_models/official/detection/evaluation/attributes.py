@@ -1,5 +1,6 @@
 from collections import defaultdict
 import numpy as np
+from absl import logging
 from pycocotools import mask as mask_utils
 from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
 import copy
@@ -51,6 +52,10 @@ def evaluate_attributes(annotations_gt: list, annotations_pr: list):
                         cat_attributes_pred[category_id].append(box_pr['attribute_probabilities'])
                         cat_attributes_gt[category_id].append(box_gt['attributes_multi_hot'])
                         break
+
+    if not attributes_pr:
+        logging.info('No TP predictions for bboxes')
+        return {}
 
     attributes_pr = np.array(attributes_pr)
     attributes_gt = np.array(attributes_gt)

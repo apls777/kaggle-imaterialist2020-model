@@ -39,7 +39,8 @@ def evaluator_generator(params):
         include_mask=True,
         per_category_metrics=params.per_category_metrics,
         include_attributes=True,
-        use_eval_image_sizes=True)
+        use_eval_image_sizes=True,
+        score_threshold=params.score_threshold)
   elif params.type == 'shapemask_box_and_mask':
     evaluator = coco_evaluator.ShapeMaskCOCOEvaluator(
         mask_eval_class=params.mask_eval_class,

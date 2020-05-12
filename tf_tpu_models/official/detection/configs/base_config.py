@@ -47,6 +47,8 @@ BASE_CFG = {
             'path': '',
             'prefix': '',
             'skip_variables_regex': '',
+            'keep_checkpoint_max': 5,
+            'save_checkpoints_secs': 600,
         },
         'frozen_variable_prefix': None,
         'train_file_pattern': '',
@@ -64,6 +66,7 @@ BASE_CFG = {
         'eval_timeout': None,
         'num_steps_per_eval': 1000,
         'eval_file_pattern': '',
+        'test_file_pattern': '',
         'eval_dataset_type': 'tfrecord',
     },
     'predict': {

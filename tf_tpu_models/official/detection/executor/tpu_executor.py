@@ -20,12 +20,14 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import json
 import os
 
 from absl import logging
 
 import numpy as np
 import six
+from evaluation.submission import encode_mask, get_metrics
 from six.moves import range
 import tensorflow.compat.v1 as tf
 
@@ -59,14 +61,12 @@ class TpuExecutor(object):
   def __init__(self,
                model_fn,
                params,
-               tpu_cluster_resolver=None,
-               keep_checkpoint_max=5):
+               tpu_cluster_resolver=None):
     self._model_dir = params.model_dir
     self._params = params
     self._tpu_job_name = params.tpu_job_name
     self._evaluator = None
     self._tpu_cluster_resolver = tpu_cluster_resolver
-    self._keep_checkpoint_max = keep_checkpoint_max
 
     input_partition_dims = None
     num_cores_per_replica = None
@@ -117,7 +117,8 @@ class TpuExecutor(object):
         model_dir=params.model_dir,
         log_step_count_steps=params.train.iterations_per_loop,
         tpu_config=tpu_config,
-        keep_checkpoint_max=self._keep_checkpoint_max,
+        keep_checkpoint_max=params.train.checkpoint.keep_checkpoint_max,
+        save_checkpoints_secs=params.train.checkpoint.save_checkpoints_secs,
     )
     self._estimator = tf.estimator.tpu.TPUEstimator(
         model_fn=model_fn,
@@ -210,6 +211,57 @@ class TpuExecutor(object):
 
     logging.info('Eval result: %s', metrics)
     return metrics
+
+  def submit(self, input_fn, checkpoint_path=None):
+    """Evaluating the model with data and labels in input_fn.
+
+    Args:
+      input_fn: Eval `input function` for tf.Estimator.
+      eval_steps: Int -  the number of steps to evaluate.
+      checkpoint_path: String - the checkpoint path to evaluate. If it is None,
+        the latest checkpoint will be inferred from `model_dir` of `Estimator`.
+
+    Returns:
+      A dictionary as evaluation metrics.
+    """
+    if not checkpoint_path:
+      checkpoint_path = self._estimator.latest_checkpoint()
+
+    if not self._evaluator:
+      self.prepare_evaluation()
+
+    if checkpoint_path:
+      current_step = int(os.path.basename(checkpoint_path).split('-')[1])
+    else:
+      raise ValueError('Checkpoint not found')
+
+    predictor = self._estimator.predict(
+        input_fn=input_fn,
+        checkpoint_path=checkpoint_path,
+        yield_single_examples=False)
+
+    while True:
+      try:
+        outputs = six.next(predictor)
+      except StopIteration:
+        break
+
+      predictions = {}
+      for key, val in outputs.items():
+        if key[0:5] == 'pred_':
+          predictions[key[5::]] = val
+
+      self._evaluator.update(predictions)
+
+    # dump predictions
+    predictions_path = os.path.join(self._model_dir, 'submission', 'predictions_%d_test.json' % current_step)
+    self._evaluator.dump_predictions(predictions_path, encode_mask)
+
+    # dump metrics
+    metrics = get_metrics(self._model_dir, current_step)
+    metrics_path = os.path.join(self._model_dir, 'submission', 'metrics_%d_test.json' % current_step)
+    with tf.gfile.Open(metrics_path, 'w') as f:
+      json.dump(metrics, f, indent=4)
 
   def predict(self, input_fn):
     return self._estimator.predict(input_fn=input_fn)

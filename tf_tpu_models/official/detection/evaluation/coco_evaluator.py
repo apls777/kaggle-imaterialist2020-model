@@ -56,7 +56,8 @@ class COCOEvaluator(object):
                need_rescale_bboxes=True,
                per_category_metrics=False,
                include_attributes=False,
-               use_eval_image_sizes=False):
+               use_eval_image_sizes=False,
+               score_threshold=0.05):
     """Constructs COCO evaluation class.
 
     The class provides the interface to metrics_fn in TPUEstimator. The
@@ -91,6 +92,7 @@ class COCOEvaluator(object):
     self._include_attributes = include_attributes
     self._per_category_metrics = per_category_metrics
     self._use_eval_image_sizes = use_eval_image_sizes
+    self._score_threshold = score_threshold
     self._metric_names = [
         'AP', 'AP50', 'AP75', 'APs', 'APm', 'APl', 'ARmax1', 'ARmax10',
         'ARmax100', 'ARs', 'ARm', 'ARl'
@@ -122,7 +124,7 @@ class COCOEvaluator(object):
     if not self._annotation_file:
       self._groundtruths = {}
 
-  def dump_predictions(self, file_path):
+  def dump_predictions(self, file_path, encode_mask_fn=None):
     """Dumps the predictions in COCO format.
 
     This can be used to output the prediction results in COCO format, for
@@ -131,11 +133,15 @@ class COCOEvaluator(object):
     Args:
       file_path: a string specifying the path to the prediction JSON file.
     """
-    coco_predictions = coco_utils.convert_predictions_to_coco_annotations(
-        self._predictions)
+    logging.info('Dumping predictions to a file...')
+
+    predictions = coco_utils.convert_predictions_to_coco_annotations(self._predictions,
+                                                                     output_image_size=1024,
+                                                                     encode_mask_fn=encode_mask_fn,
+                                                                     score_threshold=self._score_threshold)
 
     with tf.gfile.Open(file_path, 'w') as f:
-      json.dump(coco_predictions, f)
+      json.dump(predictions, f, indent=4)
 
   def evaluate(self):
     """Evaluates with detections from all images with COCO API.
@@ -162,7 +168,8 @@ class COCOEvaluator(object):
       for image in coco_gt.dataset['images']:
         eval_image_sizes[image['id']] = (image['height'], image['width'])
 
-    coco_predictions = coco_utils.convert_predictions_to_coco_annotations(self._predictions, eval_image_sizes)
+    coco_predictions = coco_utils.convert_predictions_to_coco_annotations(self._predictions, eval_image_sizes,
+                                                                          score_threshold=self._score_threshold)
     coco_dt = coco_gt.loadRes(predictions=coco_predictions)
     image_ids = [ann['image_id'] for ann in coco_predictions]
 

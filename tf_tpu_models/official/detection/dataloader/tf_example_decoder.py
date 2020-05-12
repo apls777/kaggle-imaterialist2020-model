@@ -100,7 +100,7 @@ class TfExampleDecoder(object):
         lambda: parsed_tensors['image/object/area'],
         lambda: (xmax - xmin) * (ymax - ymin))
 
-  def decode(self, serialized_example):
+  def decode(self, serialized_example, max_num_instances: int = None):
     """Decode the serialized example.
 
     Args:
@@ -185,5 +185,10 @@ class TfExampleDecoder(object):
           shape=(-1, self._num_attributes),
         ),
       })
+
+    if max_num_instances:
+      for key, value in decoded_tensors.items():
+        if key.startswith('groundtruth_'):
+          decoded_tensors[key] = value[:max_num_instances]
 
     return decoded_tensors

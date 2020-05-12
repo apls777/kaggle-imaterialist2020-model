@@ -25,7 +25,6 @@ import pprint
 from absl import flags
 from absl import logging
 
-import six
 from six.moves import range
 import tensorflow.compat.v1 as tf
 
@@ -59,6 +58,8 @@ flags.DEFINE_string(
     'tpu_job_name', None,
     'Name of TPU worker binary. Only necessary if job name is changed from'
     ' default tpu_worker.')
+
+flags.DEFINE_string('submit_checkpoint_step', None, 'Checkpoint step for submission mode.')
 
 FLAGS = flags.FLAGS
 
@@ -177,6 +178,16 @@ def main(argv):
       executor.evaluate(
           eval_input_fn,
           params.eval.eval_samples // params.eval.eval_batch_size)
+
+  elif FLAGS.mode == 'submit':
+    test_input_fn = input_reader.InputFn(
+        params.eval.test_file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT,
+        dataset_type=params.eval.eval_dataset_type)
+
+    checkpoint_path = os.path.join(FLAGS.model_dir, 'model.ckpt-' + FLAGS.submit_checkpoint_step)
+
+    executor.submit(test_input_fn, checkpoint_path)
+
   else:
     logging.info('Mode not found.')
 

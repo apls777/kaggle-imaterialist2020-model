@@ -46,6 +46,8 @@ MASKRCNN_CFG.override({
         'aug_rand_hflip': True,
         'aug_scale_min': 1.0,
         'aug_scale_max': 1.0,
+        'use_autoaugment': False,
+        'autoaugment_policy_name': 'v0',
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
         'mask_crop_size': 112,

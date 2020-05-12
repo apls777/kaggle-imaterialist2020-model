@@ -24,6 +24,7 @@ import functools
 import os
 import re
 import six
+from absl import logging
 from six.moves import zip
 import tensorflow.compat.v1 as tf
 import tensorflow.compat.v2 as tf2
@@ -286,6 +287,10 @@ class BaseModel(six.with_metaclass(abc.ABCMeta, object)):
     # Gets all trainable variables and apply the variable filter.
     train_var_list = filter_trainable_variables(
         tf.trainable_variables(), self._frozen_var_prefix)
+
+    num_trainable_variables = len(tf.trainable_variables())
+    logging.info('Total number of variables: %d, frozen: %d'
+                 % (num_trainable_variables, num_trainable_variables - len(train_var_list)))
 
     # Gets the regularization variables and apply the regularization loss.
     regularization_var_list = filter_regularization_variables(
