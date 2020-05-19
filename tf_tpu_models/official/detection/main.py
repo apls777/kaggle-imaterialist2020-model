@@ -184,7 +184,12 @@ def main(argv):
         params.eval.test_file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT,
         dataset_type=params.eval.eval_dataset_type)
 
-    checkpoint_path = os.path.join(FLAGS.model_dir, 'model.ckpt-' + FLAGS.submit_checkpoint_step)
+    checkpoint_prefix = 'model.ckpt-' + FLAGS.submit_checkpoint_step
+    checkpoint_path = os.path.join(FLAGS.model_dir, checkpoint_prefix)
+    if not tf.train.checkpoint_exists(checkpoint_path):
+        checkpoint_path = os.path.join(FLAGS.model_dir, 'best_checkpoints', checkpoint_prefix)
+        if not tf.train.checkpoint_exists(checkpoint_path):
+            raise ValueError('Checkpoint not found: %s/%s' % (FLAGS.model_dir, checkpoint_prefix))
 
     executor.submit(test_input_fn, checkpoint_path)
 

@@ -74,6 +74,7 @@ def parser_generator(params, mode):
         aug_scale_max=parser_params.aug_scale_max,
         use_autoaugment=parser_params.use_autoaugment,
         autoaugment_policy_name=parser_params.autoaugment_policy_name,
+        apply_autoaugment_after_resizing=parser_params.apply_autoaugment_after_resizing,
         skip_crowd_during_training=parser_params.skip_crowd_during_training,
         max_num_instances=parser_params.max_num_instances,
         include_mask=params.architecture.include_mask,

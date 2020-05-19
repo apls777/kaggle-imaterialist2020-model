@@ -80,7 +80,41 @@ def focal_loss(logits, targets, alpha, gamma, normalizer):
     loss = modulator * cross_entropy
     weighted_loss = tf.where(positive_label_mask, alpha * loss,
                              (1.0 - alpha) * loss)
+    weighted_loss /= normalizer + 1e-20
+  return weighted_loss
+
+
+def focal_loss_v2(logits, targets, alpha, gamma, normalizer):
+  """Compute the focal loss between `logits` and the golden `target` values.
+
+  Focal loss = -(1-pt)^gamma * log(pt)
+  where pt is the probability of being classified to the true class.
+
+  Args:
+    logits: A float32 tensor of size [batch, height_in, width_in,
+      num_predictions].
+    targets: A float32 tensor of size [batch, height_in, width_in,
+      num_predictions].
+    alpha: A float32 scalar multiplying alpha to the loss from positive examples
+      and (1-alpha) to the loss from negative examples.
+    gamma: A float32 scalar modulating loss from hard and easy examples.
+    normalizer: A float32 scalar normalizes the total loss from all examples.
+
+  Returns:
+    loss: A float32 Tensor of the same shape as "logits".
+  """
+  with tf.name_scope('focal_loss_v2'):
+    positive_label_mask = tf.equal(targets, 1.0)
+    cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=targets, logits=logits)
+    probs = tf.sigmoid(logits)
+    probs_gt = tf.where(positive_label_mask, probs, 1.0 - probs)
+    # probs_gt = tf.clip_by_value(probs_gt, 1e-07, 1.0)  # avoid NaN when net output is 1.0 or 0.0
+    # With small gamma, the implementation could produce NaN during back prop.
+    modulator = tf.pow(1.0 - probs_gt, gamma)
+    loss = modulator * cross_entropy
+    weighted_loss = tf.where(positive_label_mask, alpha * loss, (1.0 - alpha) * loss)
     weighted_loss /= normalizer
+
   return weighted_loss
 
 
@@ -351,6 +385,11 @@ class MaskrcnnLoss(object):
 
 class AttributesLoss(object):
   """Attributes loss function."""
+  def __init__(self, params):
+      self._loss_type = params.type
+      self._focal_loss_alpha = params.focal_loss_alpha
+      self._focal_loss_gamma = params.focal_loss_gamma
+      self._focal_loss_weight = params.focal_loss_weight
 
   def __call__(self, attribute_outputs, attribute_targets, select_class_targets):
     with tf.name_scope('attributes_loss'):
@@ -359,8 +398,17 @@ class AttributesLoss(object):
           tf.reshape(tf.greater(select_class_targets, 0), [batch_size, num_instances, 1]),
           [1, 1, num_attributes])
 
-      loss = tf.losses.sigmoid_cross_entropy(attribute_targets, attribute_outputs, weights=weights,
-                                             reduction=tf.losses.Reduction.SUM_BY_NONZERO_WEIGHTS)
+      if self._loss_type == 'sigmoid_cross_entropy':
+        loss = tf.losses.sigmoid_cross_entropy(attribute_targets, attribute_outputs, weights=weights,
+                                               reduction=tf.losses.Reduction.SUM_BY_NONZERO_WEIGHTS)
+      elif self._loss_type == 'focal':
+        losses = focal_loss_v2(attribute_outputs, attribute_targets, self._focal_loss_alpha, self._focal_loss_gamma,
+                               1.0)
+        loss = tf.losses.compute_weighted_loss(losses, weights=weights,
+                                               reduction=tf.losses.Reduction.SUM_BY_NONZERO_WEIGHTS)
+        loss *= self._focal_loss_weight
+      else:
+        raise ValueError('Loss type "%s" is not implemented' % self._loss_type)
 
       return loss
 
@@ -469,7 +517,7 @@ class RetinanetBoxLoss(object):
         weights=mask,
         delta=self._huber_loss_delta,
         reduction=tf.losses.Reduction.SUM)
-    box_loss /= normalizer
+    box_loss /= normalizer + 1e-20
     return box_loss
 
 
@@ -496,7 +544,7 @@ class ShapemaskMseLoss(object):
       diff = labels - probs
       diff *= tf.cast(tf.reshape(
           valid_mask, [batch_size, num_instances, 1, 1]), diff.dtype)
-      loss = tf.nn.l2_loss(diff) / tf.reduce_sum(labels)
+      loss = tf.nn.l2_loss(diff) / (tf.reduce_sum(labels) + 1e-20)
     return loss
 
 
@@ -524,7 +572,7 @@ class ShapemaskLoss(object):
           labels=labels, logits=logits)
       loss *= tf.cast(tf.reshape(
           valid_mask, [batch_size, num_instances, 1, 1]), loss.dtype)
-      loss = tf.reduce_sum(loss) / tf.reduce_sum(labels)
+      loss = tf.reduce_sum(loss) / (tf.reduce_sum(labels) + 1e-20)
     return loss
 
 

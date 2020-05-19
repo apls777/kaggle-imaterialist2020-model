@@ -100,3 +100,47 @@ class InputFn(object):
       dataset = dataset.map(_transform_fn, num_parallel_calls=64)
 
     return dataset
+
+
+class InputFnTest(object):
+  """Input function for tf.Estimator."""
+
+  def __init__(self, file_pattern, params, mode, dataset_type='tfrecord'):
+    self._file_pattern = file_pattern
+    self._mode = mode
+    self._is_training = (mode == ModeKeys.TRAIN)
+    if dataset_type == 'tfrecord':
+      self._dataset_fn = tf.data.TFRecordDataset
+      self._parser_fn = factory.parser_generator(params, mode)
+    else:
+      raise ValueError('Dataset type %s is not supported.' % dataset_type)
+
+    self._transpose_input = params.train.transpose_input
+    self._space_to_depth_block_size = params.train.space_to_depth_block_size
+
+  def __call__(self, params):
+    batch_size = params['batch_size']
+    dataset = tf.data.Dataset.list_files(self._file_pattern, shuffle=False)
+
+    if self._is_training:
+      dataset = dataset.repeat()
+
+    dataset = dataset.apply(self._dataset_fn)
+
+    # Parses the fetched records to input tensors for model function.
+    dataset = dataset.apply(
+        tf.data.experimental.map_and_batch(
+            self._parser_fn,
+            batch_size=batch_size,
+            num_parallel_batches=1,
+            drop_remainder=True))
+
+    def _transform_fn(images, labels):
+      transformed_images = transform_image_for_tpu(
+          images, self._space_to_depth_block_size, self._transpose_input)
+      return transformed_images, labels
+
+    if self._is_training:
+      dataset = dataset.map(_transform_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+    return dataset

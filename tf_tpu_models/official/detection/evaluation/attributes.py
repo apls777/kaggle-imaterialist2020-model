@@ -7,6 +7,10 @@ import copy
 
 
 def evaluate_attributes(annotations_gt: list, annotations_pr: list):
+    if not annotations_pr:
+        logging.info('No attribute predictions')
+        return {}
+
     # get a number of attributes
     num_attributes = len(annotations_pr[0]['attribute_probabilities'])
 

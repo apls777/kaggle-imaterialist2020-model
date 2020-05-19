@@ -210,7 +210,8 @@ class Dropblock(object):
     Returns:
       A version of input tensor with DropBlock applied.
     """
-    if not is_training or self._dropblock_keep_prob is None:
+    if (not is_training or self._dropblock_keep_prob is None or
+        self._dropblock_keep_prob == 1.0):
       return net
 
     logging.info('Applying DropBlock: dropblock_size %d,'

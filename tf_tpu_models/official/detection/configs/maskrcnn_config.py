@@ -48,6 +48,7 @@ MASKRCNN_CFG.override({
         'aug_scale_max': 1.0,
         'use_autoaugment': False,
         'autoaugment_policy_name': 'v0',
+        'apply_autoaugment_after_resizing': False,
         'skip_crowd_during_training': True,
         'max_num_instances': 100,
         'mask_crop_size': 112,
@@ -85,6 +86,12 @@ MASKRCNN_CFG.override({
     },
     'frcnn_box_loss': {
         'huber_loss_delta': 1.0,
+    },
+    'attributes_loss': {
+        'type': 'sigmoid_cross_entropy',
+        'focal_loss_alpha': 0.25,
+        'focal_loss_gamma': 2.0,
+        'focal_loss_weight': 50.,
     },
     'roi_proposal': {
         'rpn_pre_nms_top_k': 2000,

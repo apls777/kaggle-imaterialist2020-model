@@ -76,7 +76,7 @@ def _flip_masks_left_right(masks):
     flipped masks: rank 3 float32 tensor with shape
       [num_instances, height, width] representing instance masks.
   """
-  return masks[:, :, ::-1]
+  return tf.reverse(masks, axis=[2])
 
 
 def keypoint_flip_horizontal(keypoints, flip_point, flip_permutation,

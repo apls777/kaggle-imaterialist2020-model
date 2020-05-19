@@ -185,6 +185,7 @@ class COCOEvaluator(object):
         coco_eval.summarize_per_category()
 
     metrics_dict = self._get_metrics_dict(coco_eval, 'bbox')
+    metrics_dict['performance/bbox_ap'] = metrics_dict['bbox_performance/AP']
 
     if self._include_mask:
       logging.info('Evaluating masks...')
@@ -199,6 +200,8 @@ class COCOEvaluator(object):
           mcoco_eval.summarize_per_category()
 
       mask_metrics = self._get_metrics_dict(mcoco_eval, 'mask')
+      mask_metrics['performance/mask_ap'] = mask_metrics['mask_performance/AP']
+
       metrics_dict.update(mask_metrics)
 
     if self._include_attributes:

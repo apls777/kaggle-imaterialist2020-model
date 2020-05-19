@@ -94,6 +94,25 @@ def normalize_image(image,
     return image
 
 
+def denormalize_image(image,
+                      offset=(0.485, 0.456, 0.406),
+                      scale=(0.229, 0.224, 0.225)):
+  with tf.name_scope('normalize_image'):
+    scale = tf.constant(scale)
+    scale = tf.expand_dims(scale, axis=0)
+    scale = tf.expand_dims(scale, axis=0)
+    image *= scale
+
+    offset = tf.constant(offset)
+    offset = tf.expand_dims(offset, axis=0)
+    offset = tf.expand_dims(offset, axis=0)
+    image += offset
+
+    image = tf.image.convert_image_dtype(image, dtype=tf.uint8)
+
+  return image
+
+
 def compute_padded_size(desired_size, stride):
   """Compute the padded size given the desired size and the stride.
 
@@ -124,7 +143,7 @@ def compute_padded_size(desired_size, stride):
 
 def resize_and_crop_image(image,
                           desired_size,
-                          padded_size,
+                          padded_size=None,
                           aug_scale_min=1.0,
                           aug_scale_max=1.0,
                           seed=1,
@@ -204,8 +223,10 @@ def resize_and_crop_image(image,
           offset[0]:offset[0] + desired_size[0],
           offset[1]:offset[1] + desired_size[1], :]
 
-    output_image = tf.image.pad_to_bounding_box(
-        scaled_image, 0, 0, padded_size[0], padded_size[1])
+    if padded_size is not None:
+      output_image = tf.image.pad_to_bounding_box(scaled_image, 0, 0, padded_size[0], padded_size[1])
+    else:
+      output_image = scaled_image
 
     image_info = tf.stack([
         image_size,

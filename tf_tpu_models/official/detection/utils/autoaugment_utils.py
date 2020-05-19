@@ -98,26 +98,19 @@ def policy_v2():
   # sub-policy that will be applied sequentially on the image.
   policy = [
       [('Color', 0.0, 6), ('Cutout', 0.6, 8), ('Sharpness', 0.4, 8)],
-      [('Rotate_BBox', 0.4, 8), ('Sharpness', 0.4, 2),
-       ('Rotate_BBox', 0.8, 10)],
+      [('Rotate_BBox', 0.4, 8), ('Sharpness', 0.4, 2), ('Rotate_BBox', 0.8, 10)],
       [('TranslateY_BBox', 1.0, 8), ('AutoContrast', 0.8, 2)],
-      [('AutoContrast', 0.4, 6), ('ShearX_BBox', 0.8, 8),
-       ('Brightness', 0.0, 10)],
-      [('SolarizeAdd', 0.2, 6), ('Contrast', 0.0, 10),
-       ('AutoContrast', 0.6, 0)],
+      [('AutoContrast', 0.4, 6), ('ShearX_BBox', 0.8, 8), ('Brightness', 0.0, 10)],
+      [('SolarizeAdd', 0.2, 6), ('Contrast', 0.0, 10), ('AutoContrast', 0.6, 0)],
       [('Cutout', 0.2, 0), ('Solarize', 0.8, 8), ('Color', 1.0, 4)],
-      [('TranslateY_BBox', 0.0, 4), ('Equalize', 0.6, 8),
-       ('Solarize', 0.0, 10)],
-      [('TranslateY_BBox', 0.2, 2), ('ShearY_BBox', 0.8, 8),
-       ('Rotate_BBox', 0.8, 8)],
+      [('TranslateY_BBox', 0.0, 4), ('Equalize', 0.6, 8), ('Solarize', 0.0, 10)],
+      [('TranslateY_BBox', 0.2, 2), ('ShearY_BBox', 0.8, 8), ('Rotate_BBox', 0.8, 8)],
       [('Cutout', 0.8, 8), ('Brightness', 0.8, 8), ('Cutout', 0.2, 2)],
       [('Color', 0.8, 4), ('TranslateY_BBox', 1.0, 6), ('Rotate_BBox', 0.6, 6)],
       [('Rotate_BBox', 0.6, 10), ('BBox_Cutout', 1.0, 4), ('Cutout', 0.2, 8)],
       [('Rotate_BBox', 0.0, 0), ('Equalize', 0.6, 6), ('ShearY_BBox', 0.6, 8)],
-      [('Brightness', 0.8, 8), ('AutoContrast', 0.4, 2),
-       ('Brightness', 0.2, 2)],
-      [('TranslateY_BBox', 0.4, 8), ('Solarize', 0.4, 6),
-       ('SolarizeAdd', 0.2, 10)],
+      [('Brightness', 0.8, 8), ('AutoContrast', 0.4, 2), ('Brightness', 0.2, 2)],
+      [('TranslateY_BBox', 0.4, 8), ('Solarize', 0.4, 6), ('SolarizeAdd', 0.2, 10)],
       [('Contrast', 1.0, 10), ('SolarizeAdd', 0.2, 8), ('Equalize', 0.2, 4)],
   ]
   return policy
@@ -144,6 +137,33 @@ def policy_v3():
       [('AutoContrast', 0.8, 10), ('Contrast', 0.2, 10)],
       [('Rotate_BBox', 1.0, 10), ('Cutout', 1.0, 10)],
       [('SolarizeAdd', 0.8, 6), ('Equalize', 0.8, 8)],
+  ]
+  return policy
+
+
+def policy_v4():
+  policy = [
+      [('ShearX_BBox', 1.0, 4), ('Cutout', 1.0, 4), ('Brightness', 0.6, 4)],
+      [('ShearX_BBox', 0.8, 6), ('Cutout', 0.6, 6), ('Brightness', 0.4, 6)],
+      [('ShearX_BBox', 0.4, 10), ('Cutout', 0.4, 10), ('JpegCompression', 1.0, 2)],
+
+      [('ShearY_BBox', 1.0, 4), ('Cutout', 1.0, 4), ('Brightness', 0.6, 4)],
+      [('ShearY_BBox', 0.8, 6), ('Cutout', 0.6, 6), ('Brightness', 0.4, 6)],
+      [('ShearY_BBox', 0.4, 10), ('Cutout', 0.4, 10), ('JpegCompression', 1.0, 4)],
+
+      [('Rotate_BBox', 1.0, 2), ('Cutout', 1.0, 2), ('Contrast', 0.6, 4)],
+      [('Rotate_BBox', 1.0, 4), ('Cutout', 1.0, 4), ('Contrast', 0.6, 4)],
+      [('Rotate_BBox', 0.8, 6), ('Cutout', 1.0, 6), ('Contrast', 0.4, 6)],
+      [('Rotate_BBox', 0.6, 8), ('Cutout', 0.8, 8), ('Contrast', 0.4, 6)],
+      [('Rotate_BBox', 0.4, 10), ('Cutout', 0.6, 10), ('JpegCompression', 1.0, 6)],
+
+      [('TranslateX_BBox', 1.0, 4), ('BBox_Cutout', 1.0, 4), ('Sharpness', 0.6, 4)],
+      [('TranslateX_BBox', 0.8, 6), ('BBox_Cutout', 0.8, 6), ('Sharpness', 0.4, 6)],
+      [('TranslateX_BBox', 0.4, 8), ('BBox_Cutout', 0.6, 8), ('Sharpness', 0.2, 10)],
+
+      [('TranslateY_BBox', 1.0, 4), ('BBox_Cutout', 1.0, 4), ('SolarizeAdd', 0.6, 2)],
+      [('TranslateY_BBox', 0.8, 6), ('BBox_Cutout', 0.8, 6), ('SolarizeAdd', 0.6, 2)],
+      [('TranslateY_BBox', 0.4, 8), ('BBox_Cutout', 0.6, 8), ('SolarizeAdd', 0.6, 2)],
   ]
   return policy
 
@@ -250,7 +270,11 @@ def solarize(image, threshold=128):
   # For each pixel in the image, select the pixel
   # if the value is less than the threshold.
   # Otherwise, subtract 255 from the pixel.
-  return tf.where(image < threshold, image, 255 - image)
+  image, masks = _split_image_and_masks(image)
+
+  image = tf.where(image < threshold, image, 255 - image)
+
+  return _concat_image_and_masks(image, masks)
 
 
 def solarize_add(image, addition=0, threshold=128):
@@ -258,9 +282,13 @@ def solarize_add(image, addition=0, threshold=128):
   # we add 'addition' amount to it and then clip the
   # pixel value to be between 0 and 255. The value
   # of 'addition' is between -128 and 128.
+  image, masks = _split_image_and_masks(image)
+
   added_image = tf.cast(image, tf.int64) + addition
   added_image = tf.cast(tf.clip_by_value(added_image, 0, 255), tf.uint8)
-  return tf.where(image < threshold, added_image, image)
+  image = tf.where(image < threshold, added_image, image)
+
+  return _concat_image_and_masks(image, masks)
 
 
 def color(image, factor):
@@ -275,6 +303,8 @@ def color(image, factor):
 
 def contrast(image, factor):
   """Equivalent of PIL Contrast."""
+  image, masks = _split_image_and_masks(image)
+
   degenerate = tf.image.rgb_to_grayscale(image)
   # Cast before calling tf.histogram.
   degenerate = tf.cast(degenerate, tf.int32)
@@ -287,19 +317,36 @@ def contrast(image, factor):
   degenerate = tf.ones_like(degenerate, dtype=tf.float32) * mean
   degenerate = tf.clip_by_value(degenerate, 0.0, 255.0)
   degenerate = tf.image.grayscale_to_rgb(tf.cast(degenerate, tf.uint8))
-  return blend(degenerate, image, factor)
+  image = blend(degenerate, image, factor)
+
+  return _concat_image_and_masks(image, masks)
 
 
 def brightness(image, factor):
   """Equivalent of PIL Brightness."""
+  image, masks = _split_image_and_masks(image)
+
   degenerate = tf.zeros_like(image)
-  return blend(degenerate, image, factor)
+  image = blend(degenerate, image, factor)
+
+  return _concat_image_and_masks(image, masks)
+
+
+def jpeg_compression(image, jpeg_quality):
+    image, masks = _split_image_and_masks(image)
+    image = tf.image.adjust_jpeg_quality(image, jpeg_quality)
+
+    return _concat_image_and_masks(image, masks)
 
 
 def posterize(image, bits):
   """Equivalent of PIL Posterize."""
+  image, masks = _split_image_and_masks(image)
+
   shift = 8 - bits
-  return tf.bitwise.left_shift(tf.bitwise.right_shift(image, shift), shift)
+  image = tf.bitwise.left_shift(tf.bitwise.right_shift(image, shift), shift)
+
+  return _concat_image_and_masks(image, masks)
 
 
 def rotate(image, degrees, replace):
@@ -661,6 +708,9 @@ def _apply_multi_bbox_augmentation(image, bboxes, prob, aug_func,
     bboxes are returned that will be unchanged if func_changes_bbox is set to
     false and if true, the new altered ones will be returned.
   """
+  # TODO: should return the same order of bboxes, otherwise attributes won't be aligned
+  raise NotImplementedError
+
   # Will keep track of the new altered bboxes after aug_func is repeatedly
   # applied. The -1 values are a dummy value and this first Tensor will be
   # removed upon appending the first real bbox.
@@ -723,7 +773,8 @@ def _apply_multi_bbox_augmentation(image, bboxes, prob, aug_func,
   if func_changes_bbox:
     final_bboxes = new_bboxes
   else:
-    final_bboxes = bboxes
+    final_bboxes = loop_bboxes
+
   return image, final_bboxes
 
 
@@ -862,8 +913,34 @@ def _rotate_bbox(bbox, image_height, image_width, degrees):
 
   # Clip the bboxes to be sure the fall between [0, 1].
   min_y, min_x, max_y, max_x = _clip_bbox(min_y, min_x, max_y, max_x)
-  min_y, min_x, max_y, max_x = _check_bbox_area(min_y, min_x, max_y, max_x)
+  # min_y, min_x, max_y, max_x = _check_bbox_area(min_y, min_x, max_y, max_x)
   return tf.stack([min_y, min_x, max_y, max_x])
+
+
+def _extract_bboxes_from_masks(image):
+    image_height = tf.cast(tf.shape(image)[0], tf.float32)
+    image_width = tf.cast(tf.shape(image)[1], tf.float32)
+
+    _, masks = _split_image_and_masks(image)
+    masks = tf.cast(tf.greater(masks, 128), tf.float32)
+
+    height_proj = tf.reduce_max(masks, axis=1)
+    width_proj = tf.reduce_max(masks, axis=0)
+    height_proj_indices = height_proj * tf.expand_dims(tf.range(image_height), axis=1)
+    width_proj_indices = width_proj * tf.expand_dims(tf.range(image_width), axis=1)
+
+    bbox_ymin = tf.reduce_min(height_proj_indices + image_height * (1. - height_proj), axis=0) / image_height
+    bbox_xmin = tf.reduce_min(width_proj_indices + image_width * (1. - width_proj), axis=0) / image_width
+    bbox_ymax = tf.reduce_max(height_proj_indices, axis=0) / image_height
+    bbox_xmax = tf.reduce_max(width_proj_indices, axis=0) / image_width
+
+    bboxes = tf.stack([bbox_ymin, bbox_xmin, bbox_ymax, bbox_xmax], axis=-1)
+
+    # fix the case when there is no mask and bbox=[1, 1, 0, 0]
+    bboxes_mask = tf.expand_dims(tf.reduce_max(height_proj, axis=0), axis=-1)
+    bboxes = bboxes * bboxes_mask
+
+    return bboxes
 
 
 def rotate_with_bboxes(image, bboxes, degrees, replace):
@@ -885,15 +962,17 @@ def rotate_with_bboxes(image, bboxes, degrees, replace):
   """
   # Rotate the image.
   image = rotate(image, degrees, replace)
+  bboxes = _extract_bboxes_from_masks(image)
 
-  # Convert bbox coordinates to pixel values.
-  image_height = tf.shape(image)[0]
-  image_width = tf.shape(image)[1]
-  # pylint:disable=g-long-lambda
-  wrapped_rotate_bbox = lambda bbox: _rotate_bbox(
-      bbox, image_height, image_width, degrees)
-  # pylint:enable=g-long-lambda
-  bboxes = tf.map_fn(wrapped_rotate_bbox, bboxes)
+  # # Convert bbox coordinates to pixel values.
+  # image_height = tf.shape(image)[0]
+  # image_width = tf.shape(image)[1]
+  # # pylint:disable=g-long-lambda
+  # wrapped_rotate_bbox = lambda bbox: _rotate_bbox(
+  #     bbox, image_height, image_width, degrees)
+  # # pylint:enable=g-long-lambda
+  # bboxes = tf.map_fn(wrapped_rotate_bbox, bboxes)
+
   return image, bboxes
 
 
@@ -946,7 +1025,7 @@ def _shift_bbox(bbox, image_height, image_width, pixels, shift_horizontal):
 
   # Clip the bboxes to be sure the fall between [0, 1].
   min_y, min_x, max_y, max_x = _clip_bbox(min_y, min_x, max_y, max_x)
-  min_y, min_x, max_y, max_x = _check_bbox_area(min_y, min_x, max_y, max_x)
+  # min_y, min_x, max_y, max_x = _check_bbox_area(min_y, min_x, max_y, max_x)
   return tf.stack([min_y, min_x, max_y, max_x])
 
 
@@ -1052,7 +1131,7 @@ def _shear_bbox(bbox, image_height, image_width, level, shear_horizontal):
 
   # Clip the bboxes to be sure the fall between [0, 1].
   min_y, min_x, max_y, max_x = _clip_bbox(min_y, min_x, max_y, max_x)
-  min_y, min_x, max_y, max_x = _check_bbox_area(min_y, min_x, max_y, max_x)
+  # min_y, min_x, max_y, max_x = _check_bbox_area(min_y, min_x, max_y, max_x)
   return tf.stack([min_y, min_x, max_y, max_x])
 
 
@@ -1080,14 +1159,17 @@ def shear_with_bboxes(image, bboxes, level, replace, shear_horizontal):
   else:
     image = shear_y(image, level, replace)
 
-  # Convert bbox coordinates to pixel values.
-  image_height = tf.shape(image)[0]
-  image_width = tf.shape(image)[1]
-  # pylint:disable=g-long-lambda
-  wrapped_shear_bbox = lambda bbox: _shear_bbox(
-      bbox, image_height, image_width, level, shear_horizontal)
-  # pylint:enable=g-long-lambda
-  bboxes = tf.map_fn(wrapped_shear_bbox, bboxes)
+  bboxes = _extract_bboxes_from_masks(image)
+
+  # # Convert bbox coordinates to pixel values.
+  # image_height = tf.shape(image)[0]
+  # image_width = tf.shape(image)[1]
+  # # pylint:disable=g-long-lambda
+  # wrapped_shear_bbox = lambda bbox: _shear_bbox(
+  #     bbox, image_height, image_width, level, shear_horizontal)
+  # # pylint:enable=g-long-lambda
+  # bboxes = tf.map_fn(wrapped_shear_bbox, bboxes)
+
   return image, bboxes
 
 
@@ -1101,6 +1183,7 @@ def autocontrast(image):
     The image after it has had autocontrast applied to it and will be of type
     uint8.
   """
+  image, masks = _split_image_and_masks(image)
 
   def scale_channel(image):
     """Scale the 2D image using the autocontrast rule."""
@@ -1127,6 +1210,9 @@ def autocontrast(image):
   s2 = scale_channel(image[:, :, 1])
   s3 = scale_channel(image[:, :, 2])
   image = tf.stack([s1, s2, s3], 2)
+
+  image = _concat_image_and_masks(image, masks)
+
   return image
 
 
@@ -1284,6 +1370,9 @@ def _cutout_inside_bbox(image, bbox, pad_fraction):
     will have cutout applied. The second element is the mean of the pixels
     in the image where the bbox is located.
   """
+  num_channels = tf.shape(image)[2]
+  image, masks = _split_image_and_masks(image)
+
   image_height = tf.shape(image)[0]
   image_width = tf.shape(image)[1]
   # Transform from shape [1, 4] to [4].
@@ -1333,7 +1422,7 @@ def _cutout_inside_bbox(image, bbox, pad_fraction):
       padding_dims, constant_values=1)
 
   mask = tf.expand_dims(mask, 2)
-  mask = tf.tile(mask, [1, 1, 3])
+  mask = tf.tile(mask, [1, 1, num_channels])
 
   return mask, mean
 
@@ -1378,6 +1467,10 @@ def bbox_cutout(image, bboxes, pad_fraction, replace_with_mean):
     # value inside the bbox.
     replace = mean if replace_with_mean else 128
 
+    # create replace values for image and masks
+    replace = tf.concat([tf.ones(3, dtype=image.dtype) * tf.cast(replace, image.dtype),
+                         tf.zeros([tf.shape(image)[2] - 3], dtype=image.dtype)], axis=0)
+
     # Apply the cutout mask to the image. Where the mask is 0 we fill it with
     # `replace`.
     image = tf.where(
@@ -1404,6 +1497,7 @@ NAME_TO_FUNC = {
     'Contrast': contrast,
     'Brightness': brightness,
     'Sharpness': sharpness,
+    'JpegCompression': jpeg_compression,
     'Cutout': cutout,
     'BBox_Cutout': bbox_cutout,
     'Rotate_BBox': rotate_with_bboxes,
@@ -1497,6 +1591,7 @@ def level_to_arg(hparams):
       'Contrast': _enhance_level_to_arg,
       'Brightness': _enhance_level_to_arg,
       'Sharpness': _enhance_level_to_arg,
+      'JpegCompression': lambda level: (int(100 - 50 * (level / _MAX_LEVEL)),),
       'Cutout': lambda level: (int((level/_MAX_LEVEL) * hparams.cutout_const),),
       # pylint:disable=g-long-lambda
       'BBox_Cutout': lambda level: _bbox_cutout_level_to_arg(
@@ -1665,7 +1760,7 @@ def distort_image_with_autoaugment(image, bboxes, augmentation_name):
     A tuple containing the augmented versions of `image` and `bboxes`.
   """
   available_policies = {'v0': policy_v0, 'v1': policy_v1, 'v2': policy_v2,
-                        'v3': policy_v3, 'test': policy_vtest}
+                        'v3': policy_v3, 'v4': policy_v4, 'test': policy_vtest}
   if augmentation_name not in available_policies:
     raise ValueError('Invalid augmentation_name: {}'.format(augmentation_name))
 
@@ -1705,10 +1800,10 @@ def distort_image_and_masks_with_autoaugment(image, bboxes, masks, augmentation_
     """
     masks = tf.cast(tf.greater(masks, 0), tf.uint8) * 255
     masks = tf.transpose(masks, [1, 2, 0])
-    image = tf.concat([image, masks], axis=2)
+    image = _concat_image_and_masks(image, masks)
 
     image, boxes = distort_image_with_autoaugment(image, bboxes, augmentation_name)
-    masks = tf.transpose(tf.cast(tf.greater(image[:, :, 3:], 128), tf.float32), [2, 0, 1])
-    image = image[:, :, :3]
+    image, masks = _split_image_and_masks(image)
+    masks = tf.transpose(tf.cast(tf.greater(masks, 128), tf.float32), [2, 0, 1])
 
     return image, boxes, masks

@@ -210,6 +210,7 @@ class TpuExecutor(object):
       summary_writer.close()
 
     logging.info('Eval result: %s', metrics)
+
     return metrics
 
   def submit(self, input_fn, checkpoint_path=None):

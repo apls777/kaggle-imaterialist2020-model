@@ -71,7 +71,7 @@ class MaskrcnnModel(base_model.BaseModel):
       self._mask_loss_fn = losses.MaskrcnnLoss()
 
     if self._include_attributes:
-      self._attributes_loss_fn = losses.AttributesLoss()
+      self._attributes_loss_fn = losses.AttributesLoss(params.attributes_loss)
 
     self._generate_detections_fn = postprocess_ops.GenericDetectionGenerator(
         params.postprocess)

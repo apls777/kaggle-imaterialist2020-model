@@ -431,8 +431,8 @@ def draw_bounding_boxes_on_image_tensors(images,
     if original_image_spatial_shape is not None:
       image_and_detections[2] = _resize_original_image(image, original_shape)
 
-    image_with_boxes = tf.py_func(visualize_boxes_fn, image_and_detections[2:],
-                                  tf.uint8)
+    image_with_boxes = tf.numpy_function(visualize_boxes_fn, image_and_detections[2:],
+                                         tf.uint8)
     return image_with_boxes
 
   images = tf.map_fn(draw_boxes, elems, dtype=tf.uint8, back_prop=False)
