@@ -1,0 +1,61 @@
+architecture:
+  backbone: 'spinenet'
+  min_level: 3
+  max_level: 7
+  multilevel_features: 'identity'
+  parser: 'maskrcnn_parser'
+  num_classes: 47
+  num_attributes: 294
+train:
+  total_steps: 200000
+  train_batch_size: 64
+  learning_rate:
+    warmup_steps: 2000
+    init_learning_rate: 0.07
+    learning_rate_levels: [0.007, 0.0007]
+    learning_rate_steps: [60000, 75000]
+  l2_weight_decay: 0.00004
+  train_file_pattern: gs://kaggle-imaterialist2020-data-europe-west4/datasets/imaterialist2020/tfrecords/train-*
+  checkpoint:
+    path: gs://kaggle-imaterialist2020-data-europe-west4/models/spinenet-143-fixed/model.ckpt-164150
+    skip_variables_regex: '^(global_step).*$'
+    keep_checkpoint_max: 10
+    save_checkpoints_secs: 1800
+eval:
+  type: box_mask_and_attributes_no_rescale
+  val_json_file: gs://kaggle-imaterialist2020-data-europe-west4/datasets/imaterialist2020/split/evaluation/valid_coco_1024.json
+  eval_file_pattern: gs://kaggle-imaterialist2020-data-europe-west4/datasets/imaterialist2020/tfrecords/valid-*
+  test_file_pattern: gs://kaggle-imaterialist2020-data-europe-west4/datasets/imaterialist2020/tfrecords/test-*
+  per_category_metrics: true
+  eval_batch_size: 16
+  eval_samples: 5691
+#  score_threshold: 0.5
+anchor:
+  anchor_size: 3.0
+batch_norm_activation:
+  batch_norm_epsilon: 0.001
+  batch_norm_momentum: 0.99
+  use_sync_bn: true
+spinenet:
+  model_id: '143'
+maskrcnn_parser:
+  output_size: [1280, 1280]
+  aug_scale_min: 0.5
+  aug_scale_max: 2.0
+  use_autoaugment: true
+  autoaugment_policy_name: 'v3'
+  apply_autoaugment_after_resizing: true
+rpn_head:
+  use_batch_norm: true
+frcnn_head:
+  num_convs: 4
+  num_fcs: 1
+  use_batch_norm: true
+mrcnn_head:
+  use_batch_norm: true
+attributes_loss:
+  type: focal
+  focal_loss_alpha: 0.25
+  focal_loss_gamma: 2.0
+  focal_loss_weight: 50.0
+enable_summary: true
