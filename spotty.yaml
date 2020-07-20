@@ -86,7 +86,7 @@ scripts:
     fi
 
   submit-spinenet: |
-    if [ -n "{{MODEL}}" ] && [ -n "{{CONFIG}}" ] && [ -n "{{TPU}}" ] && [ -n "{{STEP}}" ]; then
+    if [ -n "{{MODEL}}" ] && [ -n "{{CONFIG}}" ] && [ -n "{{DATASET}}" ] && [ -n "{{TPU}}" ] && [ -n "{{STEP}}" ]; then
       export STORAGE_BUCKET=gs://kaggle-imaterialist2020-data-europe-west4
       export MODEL_DIR=${STORAGE_BUCKET}/training/{{MODEL}}
 
@@ -95,11 +95,12 @@ scripts:
         --model_dir=${MODEL_DIR} \
         --mode=submit \
         --submit_checkpoint_step={{STEP}} \
+        --submit_dataset={{DATASET}} \
         --config_file=configs/spinenet/{{CONFIG}}.yaml \
         --use_tpu=True \
         --tpu={{TPU}}
     else
-      echo "MODEL, CONFIG, TPU and STEP parameters are required."
+      echo "MODEL, CONFIG, DATASET, TPU and STEP parameters are required."
     fi
 
   submit: |
@@ -117,6 +118,27 @@ scripts:
       --params_override="include_groundtruth_in_features=False, validation_file_pattern=${STORAGE_BUCKET}/datasets/imaterialist2020/tfrecords/test-*"
     else
       echo "MODEL, CONFIG and TPU parameters are required."
+    fi
+
+  predict: |
+    if [ -n "{{MODEL}}" ] && [ -n "{{DATASET_PREFIX}}" ]  && [ -n "{{OUTPUT_DIR}}" ] && [ -n "{{TPU}}" ] && [ -n "{{STEP}}" ]; then
+      export STORAGE_BUCKET=gs://kaggle-imaterialist2020-data-europe-west4
+      export MODEL_DIR=${STORAGE_BUCKET}/training/{{MODEL}}
+      export FILE_PATTERN="${STORAGE_BUCKET}/datasets/{{DATASET_PREFIX}}-*"
+      export OUTPUT_DIR=${STORAGE_BUCKET}/predictions/{{OUTPUT_DIR}}/{{MODEL}}_{{STEP}}
+
+      PYTHONPATH=tf_tpu_models python tf_tpu_models/official/detection/main.py \
+        --model="mask_rcnn" \
+        --model_dir=${MODEL_DIR} \
+        --mode=predict \
+        --predict_checkpoint_step={{STEP}} \
+        --predict_file_pattern=$FILE_PATTERN \
+        --predict_output_dir=$OUTPUT_DIR \
+        --config_file=${MODEL_DIR}/params.yaml \
+        --use_tpu=True \
+        --tpu={{TPU}}
+    else
+      echo "MODEL, CONFIG, DATASET, TPU and STEP parameters are required."
     fi
 
   eval-coco: |
@@ -146,7 +168,7 @@ scripts:
       echo "MODEL, CONFIG and TPU parameters are required."
     fi
 
-  create-tfrecords: |
+  install-tfrecord-requirements: |
     apt update && apt install -y protobuf-compiler python3-pil python3-lxml python3-pip python3-dev git unzip
 
     pip install Cython
@@ -160,6 +182,7 @@ scripts:
 
     (cd tf-models/research && protoc object_detection/protos/*.proto --python_out=.)
 
+  create-tfrecords: |
     PYTHONPATH="tf-models:tf-models/research" python tools/datasets/create_coco_tf_record.py \
         --logtostderr \
         --include_masks \

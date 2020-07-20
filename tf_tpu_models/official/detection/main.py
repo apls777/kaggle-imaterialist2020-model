@@ -59,7 +59,9 @@ flags.DEFINE_string(
     'Name of TPU worker binary. Only necessary if job name is changed from'
     ' default tpu_worker.')
 
-flags.DEFINE_string('submit_checkpoint_step', None, 'Checkpoint step for submission mode.')
+flags.DEFINE_string('predict_file_pattern', None, 'TFRecords file pattern.')
+flags.DEFINE_string('predict_output_dir', None, 'Output directory.')
+flags.DEFINE_string('predict_checkpoint_step', None, 'Checkpoint step for "predict" mode.')
 
 FLAGS = flags.FLAGS
 
@@ -179,19 +181,27 @@ def main(argv):
           eval_input_fn,
           params.eval.eval_samples // params.eval.eval_batch_size)
 
-  elif FLAGS.mode == 'submit':
+  elif FLAGS.mode == 'predict':
+    file_pattern = FLAGS.predict_file_pattern
+    if not file_pattern:
+        raise ValueError('"predict_file_pattern" parameter is required.')
+
+    output_dir = FLAGS.predict_output_dir
+    if not output_dir:
+        raise ValueError('"predict_output_dir" parameter is required.')
+
     test_input_fn = input_reader.InputFn(
-        params.eval.test_file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT,
+        file_pattern, params, mode=ModeKeys.PREDICT_WITH_GT,
         dataset_type=params.eval.eval_dataset_type)
 
-    checkpoint_prefix = 'model.ckpt-' + FLAGS.submit_checkpoint_step
+    checkpoint_prefix = 'model.ckpt-' + FLAGS.predict_checkpoint_step
     checkpoint_path = os.path.join(FLAGS.model_dir, checkpoint_prefix)
     if not tf.train.checkpoint_exists(checkpoint_path):
         checkpoint_path = os.path.join(FLAGS.model_dir, 'best_checkpoints', checkpoint_prefix)
         if not tf.train.checkpoint_exists(checkpoint_path):
             raise ValueError('Checkpoint not found: %s/%s' % (FLAGS.model_dir, checkpoint_prefix))
 
-    executor.submit(test_input_fn, checkpoint_path)
+    executor.predict(test_input_fn, checkpoint_path, output_dir=output_dir)
 
   else:
     logging.info('Mode not found.')

@@ -42,8 +42,10 @@ def build_assignment_map(checkpoint_path,
   checkpoint_variable_map = {
       name: shape for name, shape in tf.train.list_variables(checkpoint_path)
   }
+
   if not prefix:
     prefix = ''
+
   assignment_map = {}
   incompatible_variables = set()
   for var in all_vars:
@@ -51,9 +53,11 @@ def build_assignment_map(checkpoint_path,
     # Trim the index of the variable.
     if ':' in var_name:
       var_name = var_name[:var_name.rindex(':')]
+
     if skip_variables_regex and re.match(skip_variables_regex,
                                          var_name[len(prefix):]):
       continue
+
     var_name_in_target_ckpt = var_name[len(prefix):]
 
     # Skip variables in checkpoints with incompatible shapes, otherwise errors

@@ -143,14 +143,13 @@ def convert_predictions_to_coco_annotations(predictions, eval_image_sizes: dict 
   """
   coco_predictions = []
   num_batches = len(predictions['source_id'])
-  batch_size = predictions['source_id'][0].shape[0]
-  max_num_detections = predictions['detection_classes'][0].shape[1]
   use_outer_box = 'detection_outer_boxes' in predictions
   encode_mask_fn = (lambda x: mask_api.encode(np.asfortranarray(x))) if encode_mask_fn is None else encode_mask_fn
 
   for i in tqdm(range(num_batches), total=num_batches):
     predictions['detection_boxes'][i] = box_utils.yxyx_to_xywh(
         predictions['detection_boxes'][i])
+
     if use_outer_box:
       predictions['detection_outer_boxes'][i] = box_utils.yxyx_to_xywh(
           predictions['detection_outer_boxes'][i])
@@ -158,6 +157,7 @@ def convert_predictions_to_coco_annotations(predictions, eval_image_sizes: dict 
     else:
       mask_boxes = predictions['detection_boxes']
 
+    batch_size = predictions['source_id'][i].shape[0]
     for j in range(batch_size):
       image_id = predictions['source_id'][i][j]
       orig_image_size = predictions['image_info'][i][j, 0]
@@ -174,13 +174,19 @@ def convert_predictions_to_coco_annotations(predictions, eval_image_sizes: dict 
       bbox_indices = np.argwhere(predictions['detection_scores'][i][j] >= score_threshold).flatten()
 
       if 'detection_masks' in predictions:
+        predicted_masks = predictions['detection_masks'][i][j, bbox_indices]
         image_masks = mask_utils.paste_instance_masks(
-            predictions['detection_masks'][i][j, bbox_indices],
+            predicted_masks,
             mask_boxes[i][j, bbox_indices].astype(np.float32) / eval_scale,
             int(eval_image_size[0]),
             int(eval_image_size[1]))
         binary_masks = (image_masks > 0.0).astype(np.uint8)
         encoded_masks = [encode_mask_fn(binary_mask) for binary_mask in list(binary_masks)]
+
+        mask_masks = (predicted_masks > 0.5).astype(np.float32)
+        mask_areas = mask_masks.sum(axis=-1).sum(axis=-1)
+        mask_area_fractions = (mask_areas / np.prod(predicted_masks.shape[1:])).tolist()
+        mask_mean_scores = ((predicted_masks * mask_masks).sum(axis=-1).sum(axis=-1) / mask_areas).tolist()
 
       for m, k in enumerate(bbox_indices):
         ann = {
@@ -192,6 +198,8 @@ def convert_predictions_to_coco_annotations(predictions, eval_image_sizes: dict 
 
         if 'detection_masks' in predictions:
           ann['segmentation'] = encoded_masks[m]
+          ann['mask_mean_score'] = mask_mean_scores[m]
+          ann['mask_area_fraction'] = mask_area_fractions[m]
 
         if 'detection_attributes' in predictions:
           ann['attribute_probabilities'] = predictions['detection_attributes'][i][j, k].tolist()

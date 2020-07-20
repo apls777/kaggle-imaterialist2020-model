@@ -58,6 +58,7 @@ BASE_CFG = {
         'l2_weight_decay': 0.0001,
         'gradient_clip_norm': 0.0,
         'space_to_depth_block_size': 1,
+        'num_shards': None,
     },
     'eval': {
         'eval_batch_size': 8,
@@ -101,5 +102,12 @@ BASE_CFG = {
         'use_native_resize_op': False,
     },
     'enable_summary': False,
+    'platform': {
+        'eval_master': None,
+        'gcp_project': None,
+        'tpu': None,
+        'tpu_zone': None,
+    },
+    'tpu_job_name': None,
 }
 # pylint: enable=line-too-long

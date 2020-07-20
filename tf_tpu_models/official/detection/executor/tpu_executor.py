@@ -34,6 +34,7 @@ import tensorflow.compat.v1 as tf
 from evaluation import coco_utils
 from evaluation import factory
 from hyperparameters import params_dict
+import gc
 
 
 def write_summary(logs, summary_writer, current_step):
@@ -209,18 +210,21 @@ class TpuExecutor(object):
       write_summary(losses, summary_writer, current_step)
       summary_writer.close()
 
+      self._evaluator = None
+      gc.collect()
+
     logging.info('Eval result: %s', metrics)
 
     return metrics
 
-  def submit(self, input_fn, checkpoint_path=None):
+  def predict(self, input_fn, checkpoint_path: str = None, output_dir: str = None):
     """Evaluating the model with data and labels in input_fn.
 
     Args:
       input_fn: Eval `input function` for tf.Estimator.
-      eval_steps: Int -  the number of steps to evaluate.
       checkpoint_path: String - the checkpoint path to evaluate. If it is None,
         the latest checkpoint will be inferred from `model_dir` of `Estimator`.
+      output_dir: String
 
     Returns:
       A dictionary as evaluation metrics.
@@ -255,14 +259,11 @@ class TpuExecutor(object):
       self._evaluator.update(predictions)
 
     # dump predictions
-    predictions_path = os.path.join(self._model_dir, 'submission', 'predictions_%d_test.json' % current_step)
+    predictions_path = os.path.join(output_dir, 'predictions.json')
     self._evaluator.dump_predictions(predictions_path, encode_mask)
 
     # dump metrics
     metrics = get_metrics(self._model_dir, current_step)
-    metrics_path = os.path.join(self._model_dir, 'submission', 'metrics_%d_test.json' % current_step)
+    metrics_path = os.path.join(output_dir, 'eval_metrics.json')
     with tf.gfile.Open(metrics_path, 'w') as f:
       json.dump(metrics, f, indent=4)
-
-  def predict(self, input_fn):
-    return self._estimator.predict(input_fn=input_fn)

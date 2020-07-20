@@ -31,7 +31,7 @@ from hyperparameters import params_dict
 from utils import mask_utils, box_utils
 from utils.input_utils import denormalize_image
 from utils.object_detection.visualization_utils import draw_bounding_boxes_on_image_tensors
-
+from utils.paths import root_dir
 
 common_hparams_flags.define_common_hparams_flags()
 
@@ -107,7 +107,7 @@ def main(argv):
 
         for j, image in enumerate(images):
             image_bytes = tf.io.encode_jpeg(image)
-            tf.io.write_file('data/visualizations/aug_%d.jpg' % (i * batch_size + j), image_bytes)
+            tf.io.write_file(root_dir('data/visualizations/aug_%d.jpg' % (i * batch_size + j)), image_bytes)
 
 
 if __name__ == '__main__':
