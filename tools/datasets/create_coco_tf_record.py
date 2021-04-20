@@ -117,8 +117,8 @@ def create_tf_example(image,
   encoded_jpg_io = io.BytesIO(encoded_jpg)
   image = PIL.Image.open(encoded_jpg_io)
 
-  assert image_width == image.width
-  assert image_height == image.height
+  assert image_width == image.width, f"filename={filename}: image_width={image_width}, but image.width={image.width}"
+  assert image_height == image.height, f"filename={filename}: image_height={image_height}, but image.height={image.height}"
 
   key = hashlib.sha256(encoded_jpg).hexdigest()
   feature_dict = {
