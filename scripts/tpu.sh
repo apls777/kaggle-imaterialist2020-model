@@ -9,7 +9,9 @@ Usage:
 
 Commands:
     create [project]
-    stop
+    stop <--vm-only|--tpu-only>
+    start <--vm-only|--tpu-only>
+    ssh
     delete
 EOF
     exit 1
@@ -29,9 +31,52 @@ cmd_create() {
 }
 
 cmd_stop() {
+    vm=1
+    tpu=1
+    while test $# -ne 0; do
+        case "$1" in
+        --vm)
+            tpu=0
+            ;;
+        --tpu)
+            vm=0
+            ;;
+        *)
+            echo "invalid option; $1"
+            usage_exit
+            ;;
+        esac
+        shift
+    done
+    [ $tpu -eq 1 ] && set -x && gcloud compute tpus stop $NAME --zone=$ZONE
+    [ $vm -eq 1 ] && set -x && gcloud compute instances stop $NAME --zone=$ZONE
+}
+
+cmd_start() {
+    vm=1
+    tpu=1
+    while test $# -ne 0; do
+        case "$1" in
+        --vm)
+            tpu=0
+            ;;
+        --tpu)
+            vm=0
+            ;;
+        *)
+            echo "invalid option; $1"
+            usage_exit
+            ;;
+        esac
+        shift
+    done
+    [ $vm -eq 1 ] && set -x && gcloud compute instances start $NAME --zone=$ZONE && set +x
+    [ $tpu -eq 1 ] && set -x && gcloud compute tpus start $NAME --zone=$ZONE && set +x
+}
+
+cmd_ssh() {
     set -x
-    gcloud compute tpus stop $NAME --zone=$ZONE
-    gcloud compute instances stop $NAME --zone=$ZONE
+    gcloud compute ssh $NAME --zone=$ZONE
 }
 
 cmd_delete() {
@@ -40,7 +85,7 @@ cmd_delete() {
 }
 
 case "$1" in
-create | stop | delete)
+create | stop | start | ssh | delete)
     command="$1"
     ;;
 *)
