@@ -9,8 +9,8 @@ Usage:
 
 Commands:
     create [project]
-    stop <--vm-only|--tpu-only>
-    start <--vm-only|--tpu-only>
+    stop <--vm|--tpu>
+    start <--vm|--tpu>
     ssh
     delete
 EOF
