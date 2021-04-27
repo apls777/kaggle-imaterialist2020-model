@@ -1,3 +1,28 @@
+# iMaterialist 2020 - 1st Place Solution
+
+![](https://www.googleapis.com/download/storage/v1/b/kaggle-user-content/o/inbox%2F853978%2F378129d2e9afb90bbd1f320858b9b73b%2Fimat2020_2.jpg?generation=1591441185889910&alt=media)
+
+__Model architecture:__
+
+- Mask R-CNN model
+- SpineNet-143 + FPN backbone
+- An extra head to classify attributes
+
+__Training:__
+
+- Pre-trained on the COCO dataset
+- Image resolution: 1280x1280
+- Focal loss for the attributes head
+- Augmentations: random scaling (0.5x - 2.0x), v3 policy from the AutoAugment (modified to support masks)
+
+All the changes were made on top of the [TPU Object Detection and Segmentation Framework](https://github.com/tensorflow/tpu/tree/master/models/official/detection).
+
+Read more about the solution in the [Kaggle post](https://www.kaggle.com/c/imaterialist-fashion-2020-fgvc7/discussion/154306).
+
+Download the model weights [here](https://drive.google.com/file/d/1bdC-LVj5_rJFfSiWWpeyQwKXYOLR-oNb/view?usp=sharing).
+
+---
+
 # Cloud TPUs #
 
 This repository is a collection of reference models and tools used with
