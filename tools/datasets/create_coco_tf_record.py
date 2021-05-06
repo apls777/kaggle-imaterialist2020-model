@@ -23,9 +23,7 @@ Example usage:
       --output_file_prefix="${OUTPUT_DIR/FILE_PREFIX}" \
       --num_shards=100
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import collections
 import hashlib
@@ -34,9 +32,9 @@ import json
 import logging
 import multiprocessing
 import os
+import tempfile
 from typing import List
-from absl import app
-from absl import flags
+
 import numpy as np
 import PIL.Image
 
@@ -45,6 +43,9 @@ from research.object_detection.utils import dataset_util
 from research.object_detection.utils import label_map_util
 
 import tensorflow.compat.v1 as tf
+from absl import app, flags
+from pycocotools import mask
+from research.object_detection.utils import dataset_util, label_map_util
 
 flags.DEFINE_boolean(
     "include_masks",
@@ -124,17 +125,21 @@ def create_tf_example(
     image_id = image["id"]
 
     full_path = os.path.join(image_dir, filename)
-    with tf.gfile.GFile(full_path, "rb") as fid:
-        encoded_jpg = fid.read()
+    image = PIL.Image.open(full_path)
+    print(
+        f"Resize image {filename}: ({image.width}, {image.height}) -> ({image_width}, {image_height})"
+    )
+    image = image.resize((image_width, image_height))
+    with tempfile.NamedTemporaryFile("wb", suffix=".jpg") as f:
+        image.save(f.name)
+        with tf.gfile.GFile(f.name, "rb") as fid:
+            encoded_jpg = fid.read()
     encoded_jpg_io = io.BytesIO(encoded_jpg)
     image = PIL.Image.open(encoded_jpg_io)
 
     assert (
-        image_width == image.width
+        image_width == image.width and image_height == image.height
     ), f"filename={filename}: label width={image_width}, height={image_height} but actual width={image.width}, height={image.height}"
-    assert (
-        image_height == image.height
-    ), f"filename={filename}: image_height={image_height}, but image.height={image.height}"
 
     key = hashlib.sha256(encoded_jpg).hexdigest()
     feature_dict = {
