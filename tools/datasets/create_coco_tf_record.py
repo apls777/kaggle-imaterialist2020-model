@@ -37,11 +37,6 @@ from typing import List
 
 import numpy as np
 import PIL.Image
-
-from pycocotools import mask
-from research.object_detection.utils import dataset_util
-from research.object_detection.utils import label_map_util
-
 import tensorflow.compat.v1 as tf
 from absl import app, flags
 from pycocotools import mask
@@ -134,8 +129,6 @@ def create_tf_example(
         image.save(f.name)
         with tf.gfile.GFile(f.name, "rb") as fid:
             encoded_jpg = fid.read()
-    encoded_jpg_io = io.BytesIO(encoded_jpg)
-    image = PIL.Image.open(encoded_jpg_io)
 
     assert (
         image_width == image.width and image_height == image.height
@@ -187,21 +180,29 @@ def create_tf_example(
             area.append(object_annotations["area"])
 
             if include_masks:
-                if isinstance(object_annotations["segmentation"], list) and isinstance(
-                    object_annotations["segmentation"][0], int
-                ):
-                    binary_mask = _get_binary_mask(
-                        object_annotations["segmentation"], image_height, image_width
-                    )
-                else:
-                    run_len_encoding = mask.frPyObjects(
-                        object_annotations["segmentation"], image_height, image_width
-                    )
-                    binary_mask = mask.decode(run_len_encoding)
+                segmentation = object_annotations["segmentation"]
+                if isinstance(segmentation, list):
+                    if isinstance(segmentation[0], int):
+                        binary_mask = _get_binary_mask(
+                            segmentation, image_height, image_width
+                        )
+                    elif isinstance(segmentation[0], list):
+                        run_len_encoding = mask.frPyObjects(
+                            segmentation, image_height, image_width
+                        )
+                        binary_mask = mask.decode(run_len_encoding)
+                        if not object_annotations["iscrowd"] and (
+                            len(binary_mask.shape) > 2
+                        ):
+                            binary_mask = np.amax(binary_mask, axis=2)
+                elif isinstance(segmentation, dict) and "counts" in segmentation.keys() and "size" in segmentation.keys():
+                    binary_mask = mask.decode(segmentation)
                     if not object_annotations["iscrowd"] and (
                         len(binary_mask.shape) > 2
                     ):
                         binary_mask = np.amax(binary_mask, axis=2)
+                else:
+                    raise ValueError(f"not supported format annotation: {segmentation}")
 
                 pil_image = PIL.Image.fromarray(binary_mask)
                 output_io = io.BytesIO()
