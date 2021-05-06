@@ -255,7 +255,13 @@ def _load_object_annotations(object_annotations_file):
     with tf.gfile.GFile(object_annotations_file, "r") as fid:
         obj_annotations = json.load(fid)
 
-    num_attributes = obj_annotations["info"].get("num_attributes")
+    try:
+        num_attributes = obj_annotations["info"]["num_attributes"]
+    except KeyError:
+        print(
+            "Get `num_attributes` by adding 1 to the muximum attribute id because COCO JSON doesn't have `info.num_attributes`."
+        )
+        num_attributes = obj_annotations["attributes"][-1]["id"] + 1
 
     images = obj_annotations["images"]
     category_index = label_map_util.create_category_index(obj_annotations["categories"])
