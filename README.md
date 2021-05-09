@@ -10,6 +10,8 @@ Create a VM instance and TPU by the following:
 ./scripts/tpu.sh create $GCP_PROJECT
 ```
 
+Grant `roles/storage.admin` the TPU service account (e.g., `service-1123456789@cloud-tpu.iam.gserviceaccount.com`).
+
 You can know the other sub-commands for the VM and TPU by the following:
 
 ```sh
