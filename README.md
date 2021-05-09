@@ -47,3 +47,15 @@ DATASET_ROOT=dataset-iMaterialist/raw
 ```
 
 The above script creates 50 shards of TF Record like `$DATASET_ROOT/tfrecords/image-annotation-00001-of-00050.tfrecord`.
+
+Upload TF Records to GCS like:
+
+```sh
+gsutil -m cp -r $DATASET_ROOT/tfrecords gs://$YOUR_BUCKET/$PREFIX
+```
+
+Overwrite the `train.train_file_pattern` in `configs/spinenet/sn143-imat-v3.yaml` with the above GCS URI.
+
+**Warning**
+
+If the training fails, delete the training artifacts from GCS. Otherwise, the configurations of the failed training will be loaded and it will fail again. For example, tensor's shape mismatch.
