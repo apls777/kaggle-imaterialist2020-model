@@ -5,7 +5,8 @@ architecture:
   multilevel_features: 'identity'
   parser: 'maskrcnn_parser'
   num_classes: 47
-  num_attributes: 294
+  # num_attributes: 294
+  num_attributes: 341
 train:
   total_steps: 200000
   train_batch_size: 64
