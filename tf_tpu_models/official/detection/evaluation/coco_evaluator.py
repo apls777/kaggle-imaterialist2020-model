@@ -323,17 +323,17 @@ class COCOEvaluator(object):
                 self._predictions[k].append(v)
 
         if not self._annotation_file:
-            assert groundtruths
-            for k in self._required_groundtruth_fields:
-                if k not in groundtruths:
-                    raise ValueError(
-                        "Missing the required key `{}` in groundtruths!".format(k)
-                    )
-            for k, v in six.iteritems(groundtruths):
-                if k not in self._groundtruths:
-                    self._groundtruths[k] = [v]
-                else:
-                    self._groundtruths[k].append(v)
+            if groundtruths:
+                for k in self._required_groundtruth_fields:
+                    if k not in groundtruths:
+                        raise ValueError(
+                            "Missing the required key `{}` in groundtruths!".format(k)
+                        )
+                for k, v in six.iteritems(groundtruths):
+                    if k not in self._groundtruths:
+                        self._groundtruths[k] = [v]
+                    else:
+                        self._groundtruths[k].append(v)
 
 
 class ShapeMaskCOCOEvaluator(COCOEvaluator):
