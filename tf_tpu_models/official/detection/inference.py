@@ -33,7 +33,7 @@ from absl import logging
 
 import numpy as np
 from PIL import Image
-import tensorflow.compat.v1 as tf
+import tensorflow_core._api.v1.compat.v1 as tf
 
 from configs import factory as config_factory
 from dataloader import mode_keys
