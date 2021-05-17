@@ -40,7 +40,7 @@ Create TF Records from *iMaterialist* dataset with [*COCO* format annotations](h
 
 # e.g., You can pass the arguments like the following if you use https://github.com/hrsma2i/dataset-iMaterialist
 DATASET_ROOT=dataset-iMaterialist/raw
-./scripts/create_tf_records.sh \
+./scripts/create_tf_records.sh train \
     $DATASET_ROOT/train \
     $DATASET_ROOT/instances_attributes_train2020.json \
     $DATASET_ROOT/tfrecords/train

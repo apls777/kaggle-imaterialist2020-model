@@ -34,10 +34,11 @@ import multiprocessing
 import os
 import tempfile
 from typing import List
+from pathlib import Path
 
 import numpy as np
 import PIL.Image
-import tensorflow.compat.v1 as tf
+import tensorflow_core._api.v1.compat.v1 as tf
 from absl import app, flags
 from pycocotools import mask
 from research.object_detection.utils import dataset_util, label_map_util
@@ -195,7 +196,11 @@ def create_tf_example(
                             len(binary_mask.shape) > 2
                         ):
                             binary_mask = np.amax(binary_mask, axis=2)
-                elif isinstance(segmentation, dict) and "counts" in segmentation.keys() and "size" in segmentation.keys():
+                elif (
+                    isinstance(segmentation, dict)
+                    and "counts" in segmentation.keys()
+                    and "size" in segmentation.keys()
+                ):
                     binary_mask = mask.decode(segmentation)
                     if not object_annotations["iscrowd"] and (
                         len(binary_mask.shape) > 2
@@ -313,6 +318,18 @@ def _load_images_info(images_info_file):
     return info_dict["images"]
 
 
+def _load_images_info_from_dir(image_dir: str):
+    image_paths = Path(image_dir).glob("*")
+    for i, path in enumerate(image_paths):
+        image = PIL.Image.open(path)
+        yield {
+            "id": i,
+            "height": image.height,
+            "width": image.width,
+            "file_name": path.name,
+        }
+
+
 def _create_tf_record_from_coco_annotations(
     images_info_file,
     image_dir,
@@ -347,7 +364,10 @@ def _create_tf_record_from_coco_annotations(
         )
         for i in range(num_shards)
     ]
-    images = _load_images_info(images_info_file)
+    if images_info_file:
+        images = _load_images_info(images_info_file)
+    else:
+        images = list(_load_images_info_from_dir(image_dir))
 
     img_to_obj_annotation = None
     img_to_caption_annotation = None
@@ -424,17 +444,17 @@ def _get_binary_mask(encoded_pixels: List[int], height: int, width: int):
 
 def main(_):
     assert FLAGS.image_dir, "`image_dir` missing."
-    assert (
-        FLAGS.image_info_file
-        or FLAGS.object_annotations_file
-        or FLAGS.caption_annotations_file
-    ), ("All annotation files are " "missing.")
     if FLAGS.image_info_file:
         images_info_file = FLAGS.image_info_file
     elif FLAGS.object_annotations_file:
         images_info_file = FLAGS.object_annotations_file
-    else:
+    elif FLAGS.caption_annotations_file:
         images_info_file = FLAGS.caption_annotations_file
+    else:
+        images_info_file = None
+        logger.info(
+            "`images_info_file` is None, so images_info is get from actual images from `images_dir`."
+        )
 
     directory = os.path.dirname(FLAGS.output_file_prefix)
     if not tf.gfile.IsDirectory(directory):
