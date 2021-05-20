@@ -76,6 +76,13 @@ logger = tf.get_logger()
 logger.setLevel(logging.INFO)
 
 
+# Hashing can't work.
+# c.f., https://github.com/tensorflow/tpu/issues/917
+def hash_image_id(image_id: str) -> int:
+    # Truncate sha1 (20 bytes) to Python int (0 ~ 2^(4*7)-1).
+    return int(hashlib.sha1(str(image_id).encode("utf-8")).hexdigest()[:7], 16)
+
+
 def create_tf_example(
     image,
     image_dir,
@@ -136,11 +143,17 @@ def create_tf_example(
     ), f"filename={filename}: label width={image_width}, height={image_height} but actual width={image.width}, height={image.height}"
 
     key = hashlib.sha256(encoded_jpg).hexdigest()
+    # Hashing can't work.
+    # c.f., https://github.com/tensorflow/tpu/issues/917
+    # image_id = hash_image_id(image_id)
     feature_dict = {
         "image/height": dataset_util.int64_feature(image_height),
         "image/width": dataset_util.int64_feature(image_width),
         "image/filename": dataset_util.bytes_feature(filename.encode("utf8")),
-        "image/source_id": dataset_util.bytes_feature(str(image_id).encode("utf8")),
+        # source_id must be integer string
+        # c.f., https://github.com/tensorflow/tpu/issues/516
+        # c.f., process_source_id in tf_tpu_models/official/deteciton/utils/dataloader_utils.py
+        "image/source_id": dataset_util.bytes_feature(str(image_id).encode("utf-8")),
         "image/key/sha256": dataset_util.bytes_feature(key.encode("utf8")),
         "image/encoded": dataset_util.bytes_feature(encoded_jpg),
         "image/format": dataset_util.bytes_feature("jpeg".encode("utf8")),
@@ -319,7 +332,7 @@ def _load_images_info(images_info_file):
 
 
 def _load_images_info_from_dir(image_dir: str):
-    image_paths = Path(image_dir).glob("*")
+    image_paths = sorted(list(Path(image_dir).glob("*")))
     for i, path in enumerate(image_paths):
         image = PIL.Image.open(path)
         yield {
