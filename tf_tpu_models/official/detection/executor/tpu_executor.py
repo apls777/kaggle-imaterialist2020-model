@@ -27,7 +27,7 @@ from absl import logging
 
 import numpy as np
 import six
-from evaluation.submission import encode_mask, get_metrics
+from evaluation.submission import get_metrics
 from six.moves import range
 import tensorflow_core._api.v1.compat.v1 as tf
 
@@ -268,7 +268,7 @@ class TpuExecutor(object):
 
         # dump predictions
         predictions_path = os.path.join(output_dir, "predictions.json")
-        self._evaluator.dump_predictions(predictions_path, encode_mask)
+        self._evaluator.dump_predictions(predictions_path)
 
         # dump metrics
         metrics = get_metrics(self._model_dir, current_step)

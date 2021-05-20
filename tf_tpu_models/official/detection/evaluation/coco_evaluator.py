@@ -41,7 +41,7 @@ from evaluation.cocoeval import COCOeval
 from pycocotools import cocoeval
 import six
 from six.moves import range
-import tensorflow.compat.v1 as tf
+import tensorflow_core._api.v1.compat.v1 as tf
 
 from evaluation import coco_utils
 from utils import class_utils
@@ -161,6 +161,14 @@ class COCOEvaluator(object):
             encode_mask_fn=encode_mask_fn,
             score_threshold=self._score_threshold,
         )
+
+        # Avoid TypeError: Object of type bytes is not JSON serializable
+        # bytes to str: b'' -> ''
+        if encode_mask_fn is None:
+            for ann in predictions:
+                ann["segmentation"]["counts"] = ann["segmentation"]["counts"].decode(
+                    "utf-8"
+                )
 
         with tf.gfile.Open(file_path, "w") as f:
             json.dump(predictions, f, indent=4)
