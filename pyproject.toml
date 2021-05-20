@@ -31,6 +31,7 @@ tensorflow = "^1.15"
 tensorboard = "^1.15"
 absl-py = "^0.12.0"
 segmentation = {git = "https://github.com/hrsma2i/segmentation.git", rev = "1c3972d80af0566cea8ef47d25a08de7ccb42222"}
+typer = "^0.3.2"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.0"
