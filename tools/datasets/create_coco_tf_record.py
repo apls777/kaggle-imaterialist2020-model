@@ -128,7 +128,7 @@ def create_tf_example(
     image_id = image["id"]
 
     full_path = os.path.join(image_dir, filename)
-    image = PIL.Image.open(full_path)
+    image = PIL.Image.open(full_path).convert("RGB")
     print(
         f"Resize image {filename}: ({image.width}, {image.height}) -> ({image_width}, {image_height})"
     )
