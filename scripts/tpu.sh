@@ -108,4 +108,6 @@ create | stop | start | ssh | delete)
 esac
 shift
 
+gcloud config set project "$PROJECT"
+
 "cmd_$command" "$@"
