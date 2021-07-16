@@ -54,7 +54,7 @@ git clone https://github.com/hrsma2i/kaggle-imaterialist2020-model.git
 cd $HOME/kaggle-imaterialist2020-model
 ./scripts/setup_bashrc.sh
 source ~/.bashrc
-./scripts/install_py_deps.sh
+./scripts/install_requirements.sh
 ```
 
 Setup is done. Log out from the terminal by ctrl-D, and stop the VM and TPU.
