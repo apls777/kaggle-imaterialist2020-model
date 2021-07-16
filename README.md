@@ -52,10 +52,9 @@ cd $HOME
 git clone https://github.com/hrsma2i/kaggle-imaterialist2020-model.git
 
 cd $HOME/kaggle-imaterialist2020-model
-./scripts/setup.sh
-pip install poetry
-poetry install
-poetry shell
+./scripts/setup_bashrc.sh
+source ~/.bashrc
+./scripts/install_py_deps.sh
 ```
 
 Setup is done. Log out from the terminal by ctrl-D, and stop the VM and TPU.
@@ -91,6 +90,8 @@ Set up [iMaterialist](https://github.com/hrsma2i/dataset-iMaterialist) dataset.
 Create TF Records from iMaterialist [*COCO* format annotations](https://github.com/cvdfoundation/fashionpedia#annotations).
 
 ```sh
+poetry shell
+
 PYTHONPATH="tf-models:tf-models/research" \
     python tools/datasets/create_coco_tf_record.py \
     --logtostderr \
@@ -150,6 +151,8 @@ Log in to the VM instance via SSH.
 Predict for your images.
 
 ```sh
+poetry shell
+
 ./scripts/predict.sh \
     $MODEL_GCS_DIR \
     $IMAGE_GCS_DIR \
