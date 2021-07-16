@@ -1,3 +1,6 @@
+/tpu_configs/*
+!/tpu_configs/example.json
+
 .DS_Store
 .ipynb_checkpoints
 node_modules
