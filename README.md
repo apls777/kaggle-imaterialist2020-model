@@ -24,18 +24,49 @@ Install `ctpu` command.
 https://github.com/tensorflow/tpu/tree/master/tools/ctpu#download
 
 
+Copy and modify a TPU config file.
+
+```sh
+# at the local machine
+cp tpu_configs/example.json tpu_configs/YOUR_TPU.json
+```
+
+
 Create a VM instance and TPU.
 
 ```sh
-./scripts/tpu.sh create $GCP_PROJECT
+# at the local machine
+export TPU_CONFIG_JSON=tpu_configs/YOUR_TPU.json
+./scripts/tpu.sh create
 ```
+
+You will automatically log in the VM via SSH.
 
 Grant `roles/storage.admin` the TPU service account (e.g., `service-1123456789@cloud-tpu.iam.gserviceaccount.com`).
 
-Log in to the VM instance via SSH.
+Install Python dependencies to the VM instance.
 
+```sh
+# at the remote VM
+cd $HOME
+git clone https://github.com/hrsma2i/kaggle-imaterialist2020-model.git
+
+cd $HOME/kaggle-imaterialist2020-model
+./scripts/setup.sh
+pip install poetry
+poetry install
+poetry shell
 ```
-./scripts/tpu.sh ssh
+
+Setup is done. Log out from the terminal by ctrl-D, and stop the VM and TPU.
+
+```bash
+# at the local machine
+./scripts/tpu.sh stop
+
+# or
+./scripts/tpu.sh stop --vm
+./scripts/tpu.sh stop --tpu
 ```
 
 You can know the other sub-commands for the VM and TPU by the following:
@@ -44,27 +75,18 @@ You can know the other sub-commands for the VM and TPU by the following:
 ./scripts/tpu.sh -h
 ```
 
-Install Python dependencies to the VM instance.
-
-```sh
-cd $HOME
-git clone https://github.com/hrsma2i/kaggle-imaterialist2020-model.git
-
-cd $HOME/kaggle-imaterialist2020-model
-pip install poetry
-poetry install
-poetry shell
-```
 
 # Train
 
-Set up [iMaterialist](https://github.com/hrsma2i/dataset-iMaterialist) dataset.
-
-Install other dependencies.
+Log in to the VM instance via SSH.
 
 ```sh
-./scripts/install_tfrecord_requirements.sh
+# at the local machine
+./scripts/tpu.sh start
+./scripts/tpu.sh ssh
 ```
+
+Set up [iMaterialist](https://github.com/hrsma2i/dataset-iMaterialist) dataset.
 
 Create TF Records from iMaterialist [*COCO* format annotations](https://github.com/cvdfoundation/fashionpedia#annotations).
 
@@ -116,10 +138,12 @@ If the training fails, delete the training artifacts from GCS. Otherwise, the co
 
 # Predict
 
-Install other dependencies.
+Log in to the VM instance via SSH.
 
 ```sh
-./scripts/install_tfrecord_requirements.sh
+# at the local machine
+./scripts/tpu.sh start --vm
+./scripts/tpu.sh ssh
 ```
 
 
