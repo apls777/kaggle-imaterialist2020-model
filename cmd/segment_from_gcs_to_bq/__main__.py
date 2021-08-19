@@ -1,13 +1,11 @@
-# from __future__ import annotations
+from __future__ import absolute_import, annotations, division, print_function
 
 from dataclasses import dataclass
 
 # from pathlib import Path
 from typing import NewType
 
-# import numpy as np
-# from six import with_metaclass
-# from utils import input_utils
+from evaluation import coco_utils
 
 # import tensorflow_core._api.v1.compat.v1 as tf
 # import yaml
@@ -16,7 +14,11 @@ from typing import NewType
 # from modeling import factory as model_factory
 # from PIL import Image
 from typing_extensions import TypedDict
-from evaluation import coco_utils
+
+# import numpy as np
+# from six import with_metaclass
+# from utils import input_utils
+
 
 Height = NewType("Height", int)
 Width = NewType("Width", int)
@@ -169,35 +171,28 @@ supports running on CPU/GPU with batch size 1.
 """
 # pylint: enable=line-too-long
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import base64
 import csv
 import io
-
-from absl import flags
-from absl import logging
+import json
+from dataclasses import asdict
 
 import numpy as np
-from PIL import Image
 import tensorflow_core._api.v1.compat.v1 as tf
-
+from absl import flags, logging
 from configs import factory as config_factory
 from dataloader import mode_keys
-from modeling import factory as model_factory
-from utils import box_utils
-from utils import input_utils
-from utils import mask_utils
-from utils.object_detection import visualization_utils
 from hyperparameters import params_dict
-
+from modeling import factory as model_factory
+from PIL import Image
+from utils import box_utils, input_utils, mask_utils
+from utils.object_detection import visualization_utils
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
-    "model", "retinanet", "Support `retinanet`, `mask_rcnn` and `shapemask`."
+    "model", "mask_rcnn", "Support `retinanet`, `mask_rcnn` and `shapemask`."
 )
 flags.DEFINE_integer("image_size", 640, "The image size.")
 flags.DEFINE_string("checkpoint_path", "", "The path to the checkpoint file.")
@@ -208,26 +203,7 @@ flags.DEFINE_string(
     "The YAML file/string that specifies the parameters "
     "override in addition to the `config_file`.",
 )
-flags.DEFINE_string(
-    "label_map_file",
-    "",
-    "The label map file. See --label_map_format for the definition.",
-)
-flags.DEFINE_string(
-    "label_map_format",
-    "csv",
-    "The format of the label map file. Currently only support `csv` where the "
-    "format of each row is: `id:name`.",
-)
-flags.DEFINE_string(
-    "image_file_pattern", "", "The glob that specifies the image file pattern."
-)
-flags.DEFINE_string(
-    "out_json",
-    "/tmp/segment_from_gcs_to_bq.json",
-    "The output HTML file that includes images with rendered detections.",
-)
-flags.DEFINE_integer("max_boxes_to_draw", 10, "The maximum number of boxes to draw.")
+flags.DEFINE_string("image_file", "", "The glob that specifies the image file pattern.")
 flags.DEFINE_float(
     "min_score_threshold", 0.05, "The minimum score thresholds in order to draw boxes."
 )
@@ -237,26 +213,6 @@ def main(unused_argv):
     del unused_argv
     # Load the label map.
     print(" - Loading the label map...")
-    label_map_dict = {}
-    if FLAGS.label_map_format == "csv":
-        with tf.gfile.Open(FLAGS.label_map_file, "r") as csv_file:
-            reader = csv.reader(csv_file, delimiter=":")
-            for row in reader:
-                if len(row) != 2:
-                    raise ValueError(
-                        "Each row of the csv label map file must be in "
-                        "`id:name` format."
-                    )
-                id_index = int(row[0])
-                name = row[1]
-                label_map_dict[id_index] = {
-                    "id": id_index,
-                    "name": name,
-                }
-    else:
-        raise ValueError(
-            "Unsupported label map format: {}.".format(FLAGS.label_mape_format)
-        )
 
     params = config_factory.config_generator(FLAGS.model)
     if FLAGS.config_file:
@@ -286,70 +242,63 @@ def main(unused_argv):
         # batching.
         images = tf.reshape(image, [1, image_size[0], image_size[1], 3])
         images_info = tf.expand_dims(image_info, axis=0)
+        # Tensor("resize_and_crop_image/stack:0", shape=(4, 2), dtype=float32)
 
         # model inference
         outputs = model.build_outputs(
-            images, {"image_info": images_info}, mode=mode_keys.PREDICT
+            images,
+            {"image_info": images_info},
+            mode=mode_keys.PREDICT,
         )
 
         outputs["detection_boxes"] = outputs["detection_boxes"] / tf.tile(
             images_info[:, 2:3, :], [1, 1, 2]
         )
 
+        outputs["source_id"] = tf.constant([[1]])
         predictions = outputs
+        # predictions = model.build_predictions(outputs, {"image_info": images_info})
 
         # Create a saver in order to load the pre-trained checkpoint.
         saver = tf.train.Saver()
 
-        image_with_detections_list = []
         with tf.Session() as sess:
             print(" - Loading the checkpoint...")
             saver.restore(sess, FLAGS.checkpoint_path)
 
-            image_files = tf.gfile.Glob(FLAGS.image_file_pattern)
-            for i, image_file in enumerate(image_files):
-                print(" - Processing image %d..." % i)
+            print(" - Processing image %d...")
 
-                with tf.gfile.GFile(image_file, "rb") as f:
-                    image_bytes = f.read()
+            with tf.gfile.GFile(FLAGS.image_file, "rb") as f:
+                image_bytes = f.read()
 
-                image = Image.open(image_file)
-                image = image.convert("RGB")  # needed for images with 4 channels.
-                width, height = image.size
-                np_image = (
-                    np.array(image.getdata()).reshape(height, width, 3).astype(np.uint8)
-                )
+            image = Image.open(FLAGS.image_file)
+            image = image.convert("RGB")  # needed for images with 4 channels.
+            width, height = image.size
 
-                predictions_np = sess.run(
-                    predictions, feed_dict={image_input: image_bytes}
-                )
+            predictions_np = sess.run(predictions, feed_dict={image_input: image_bytes})
+            print("************")
+            print(image_info)
 
-                predictions = coco_utils.convert_predictions_to_coco_annotations(
-                    predictions_np,
-                    output_image_size=1024,
-                    encode_mask_fn=encode_mask_fn,
-                    score_threshold=self._score_threshold,
-                )
+            predictions = coco_utils.convert_predictions_to_coco_annotations(
+                predictions_np,
+                output_image_size=1024,
+                score_threshold=FLAGS.min_score_threshold,
+            )
 
-                seg = Segmentation(
-                    filename="foo", # predictions["image_id"] から変換できそう
-                    segmentation=predictions["segmentation"],
-                    imat_category_id=predictions["category_id"],
-                    score=predictions["score"],
-                    mask_mean_score=predictions["mask_mean_score"],
-                )
+            seg = Segmentation(
+                filename="foo",  # predictions["image_id"] から変換できそう
+                segmentation=predictions["segmentation"],
+                imat_category_id=predictions["category_id"],
+                score=predictions["score"],
+                mask_mean_score=predictions["mask_mean_score"],
+            )
 
-    print(" - Saving the outputs...")
-    json_str = ""
-    with tf.gfile.GFile(FLAGS.out_json, "w") as f:
-        f.write(json_str)
+        print(seg)
 
 
 if __name__ == "__main__":
     flags.mark_flag_as_required("model")
     flags.mark_flag_as_required("checkpoint_path")
-    flags.mark_flag_as_required("label_map_file")
-    flags.mark_flag_as_required("image_file_pattern")
-    flags.mark_flag_as_required("output_html")
+    flags.mark_flag_as_required("image_file")
     logging.set_verbosity(logging.INFO)
     tf.app.run(main)
