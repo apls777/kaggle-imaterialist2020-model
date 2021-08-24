@@ -1,6 +1,7 @@
 from __future__ import absolute_import, annotations, division, print_function
 
 from dataclasses import dataclass
+from os import R_OK
 
 # from pathlib import Path
 from typing import NewType
@@ -171,7 +172,6 @@ supports running on CPU/GPU with batch size 1.
 """
 # pylint: enable=line-too-long
 
-
 import base64
 import csv
 import io
@@ -179,6 +179,7 @@ import json
 from dataclasses import asdict
 
 import numpy as np
+import six
 import tensorflow_core._api.v1.compat.v1 as tf
 from absl import flags, logging
 from configs import factory as config_factory
@@ -241,8 +242,19 @@ def main(unused_argv):
 
         # batching.
         images = tf.reshape(image, [1, image_size[0], image_size[1], 3])
+        """
+        images = tf.concat(
+            [
+                tf.reshape(image, [1, image_size[0], image_size[1], 3]),
+                tf.reshape(image, [1, image_size[0], image_size[1], 3]),
+            ],
+            axis=0,
+        )
+        """
+        # images: (batch_size=2, width, height, RGB=3)
         images_info = tf.expand_dims(image_info, axis=0)
-        # Tensor("resize_and_crop_image/stack:0", shape=(4, 2), dtype=float32)
+        # images_info = tf.concat([tf.expand_dims(image_info, axis=0), tf.expand_dims(image_info, axis=0)],axis=0)
+        # image_info: (2, 4, 2)=(batch_size, original|desired|scale|offset, height(y)|width(x))  # noqa: E501
 
         # model inference
         outputs = model.build_outputs(
@@ -255,9 +267,10 @@ def main(unused_argv):
             images_info[:, 2:3, :], [1, 1, 2]
         )
 
-        outputs["source_id"] = tf.constant([[1]])
-        predictions = outputs
-        # predictions = model.build_predictions(outputs, {"image_info": images_info})
+        # outputs["image_info"] = images_info
+        # predictions = outputs
+        predictions = model.build_predictions(outputs, {"image_info": images_info})
+        predictions["pred_source_id"] = tf.constant([[1]])
 
         # Create a saver in order to load the pre-trained checkpoint.
         saver = tf.train.Saver()
@@ -276,21 +289,37 @@ def main(unused_argv):
             width, height = image.size
 
             predictions_np = sess.run(predictions, feed_dict={image_input: image_bytes})
-            print("************")
-            print(image_info)
 
+            predictions = {}
+            for key, val in predictions_np.items():
+                # print(key, val)
+                if key[0:5] == "pred_":
+                    predictions[key[5::]] = val
+
+            for k, v in six.iteritems(predictions):
+                if k not in predictions:
+                    predictions[k] = [v]
+                else:
+                    predictions[k] = np.expand_dims(predictions[k], axis=0)
+
+            # やりたいこと: convert_..._annotatoins で predictions に source_id がないと言われないようにすること
+            # outputs には source_id があるが、 build_predictions で source_id が pred_source_id, gt_source_id に改名されて predictions に入る
+            # convert_..._annotataions にわたす predictions は predictions_np ではなく coco_evaluator の self.predictions
+            # 渡される前に evaluator.update() で更新されている
+            # evaluator.update の内部で pred_source_id, gt_source_id が source_id に戻されてるんじゃないかという仮設が立つ
+            # もし、そうなら、 update の処理をここに挟めばいいだけ
             predictions = coco_utils.convert_predictions_to_coco_annotations(
-                predictions_np,
+                predictions,
                 output_image_size=1024,
                 score_threshold=FLAGS.min_score_threshold,
             )
 
             seg = Segmentation(
                 filename="foo",  # predictions["image_id"] から変換できそう
-                segmentation=predictions["segmentation"],
-                imat_category_id=predictions["category_id"],
-                score=predictions["score"],
-                mask_mean_score=predictions["mask_mean_score"],
+                segmentation=predictions[0]["segmentation"],
+                imat_category_id=predictions[0]["category_id"],
+                score=predictions[0]["score"],
+                mask_mean_score=predictions[0]["mask_mean_score"],
             )
 
         print(seg)
