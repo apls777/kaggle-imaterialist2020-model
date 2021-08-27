@@ -242,18 +242,8 @@ def main(unused_argv):
 
         # batching.
         images = tf.reshape(image, [1, image_size[0], image_size[1], 3])
-        """
-        images = tf.concat(
-            [
-                tf.reshape(image, [1, image_size[0], image_size[1], 3]),
-                tf.reshape(image, [1, image_size[0], image_size[1], 3]),
-            ],
-            axis=0,
-        )
-        """
         # images: (batch_size=2, width, height, RGB=3)
         images_info = tf.expand_dims(image_info, axis=0)
-        # images_info = tf.concat([tf.expand_dims(image_info, axis=0), tf.expand_dims(image_info, axis=0)],axis=0)
         # image_info: (2, 4, 2)=(batch_size, original|desired|scale|offset, height(y)|width(x))  # noqa: E501
 
         # model inference
@@ -270,7 +260,8 @@ def main(unused_argv):
         # outputs["image_info"] = images_info
         # predictions = outputs
         predictions = model.build_predictions(outputs, {"image_info": images_info})
-        predictions["pred_source_id"] = tf.constant([[1]])
+        source_id = tf.placeholder(dtype=tf.int32)
+        predictions["pred_source_id"] = tf.expand_dims(source_id, axis=0)
 
         # Create a saver in order to load the pre-trained checkpoint.
         saver = tf.train.Saver()
@@ -279,50 +270,54 @@ def main(unused_argv):
             print(" - Loading the checkpoint...")
             saver.restore(sess, FLAGS.checkpoint_path)
 
-            print(" - Processing image %d...")
+            image_files = tf.gfile.Glob("GCS_FOLDER/*")
+            for source_index, image_file in enumerate(image_files):
 
-            with tf.gfile.GFile(FLAGS.image_file, "rb") as f:
-                image_bytes = f.read()
+                print(f" - Processing image {source_index}...")
 
-            image = Image.open(FLAGS.image_file)
-            image = image.convert("RGB")  # needed for images with 4 channels.
-            width, height = image.size
+                with tf.gfile.GFile(image_file, "rb") as f:
+                    image_bytes = f.read()
 
-            predictions_np = sess.run(predictions, feed_dict={image_input: image_bytes})
+                predictions_np = sess.run(
+                    predictions,
+                    feed_dict={image_input: image_bytes, source_id: source_index},
+                )
 
-            predictions = {}
-            for key, val in predictions_np.items():
-                # print(key, val)
-                if key[0:5] == "pred_":
-                    predictions[key[5::]] = val
+                predictions2 = {}
+                for key, val in predictions_np.items():
+                    # print(key, val)
+                    if key[0:5] == "pred_":
+                        predictions2[key[5::]] = val
 
-            for k, v in six.iteritems(predictions):
-                if k not in predictions:
-                    predictions[k] = [v]
-                else:
-                    predictions[k] = np.expand_dims(predictions[k], axis=0)
+                for k, v in six.iteritems(predictions2):
+                    predictions2[k] = np.expand_dims(predictions2[k], axis=0)
 
-            # やりたいこと: convert_..._annotatoins で predictions に source_id がないと言われないようにすること
-            # outputs には source_id があるが、 build_predictions で source_id が pred_source_id, gt_source_id に改名されて predictions に入る
-            # convert_..._annotataions にわたす predictions は predictions_np ではなく coco_evaluator の self.predictions
-            # 渡される前に evaluator.update() で更新されている
-            # evaluator.update の内部で pred_source_id, gt_source_id が source_id に戻されてるんじゃないかという仮設が立つ
-            # もし、そうなら、 update の処理をここに挟めばいいだけ
-            predictions = coco_utils.convert_predictions_to_coco_annotations(
-                predictions,
-                output_image_size=1024,
-                score_threshold=FLAGS.min_score_threshold,
-            )
+                # やりたいこと: convert_..._annotatoins で predictions に source_id がないと言われないようにすること
+                # outputs には source_id があるが、 build_predictions で source_id が pred_source_id, gt_source_id に改名されて predictions に入る
+                # convert_..._annotataions にわたす predictions は predictions_np ではなく coco_evaluator の self.predictions
+                # 渡される前に evaluator.update() で更新されている
+                # evaluator.update の内部で pred_source_id, gt_source_id が source_id に戻されてるんじゃないかという仮設が立つ
+                # もし、そうなら、 update の処理をここに挟めばいいだけ
+                predictions3 = coco_utils.convert_predictions_to_coco_annotations(
+                    predictions2,
+                    output_image_size=1024,
+                    score_threshold=FLAGS.min_score_threshold,
+                )
 
-            seg = Segmentation(
-                filename="foo",  # predictions["image_id"] から変換できそう
-                segmentation=predictions[0]["segmentation"],
-                imat_category_id=predictions[0]["category_id"],
-                score=predictions[0]["score"],
-                mask_mean_score=predictions[0]["mask_mean_score"],
-            )
+                seg_list = []
 
-        print(seg)
+                for j in range(len(predictions3)):
+                    seg = Segmentation(
+                        filename=predictions3[j]["image_id"],
+                        segmentation=predictions3[j]["segmentation"],
+                        imat_category_id=predictions3[j]["category_id"],
+                        score=predictions3[j]["score"],
+                        mask_mean_score=predictions3[j]["mask_mean_score"],
+                    )
+
+                    seg_list.append(asdict(seg))
+
+                print(seg_list)
 
 
 if __name__ == "__main__":
