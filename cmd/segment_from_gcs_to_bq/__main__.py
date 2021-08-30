@@ -204,7 +204,9 @@ flags.DEFINE_string(
     "The YAML file/string that specifies the parameters "
     "override in addition to the `config_file`.",
 )
-flags.DEFINE_string("image_file", "", "The glob that specifies the image file pattern.")
+flags.DEFINE_string(
+    "image_files_pattern", "", "The glob that specifies the image file pattern."
+)
 flags.DEFINE_float(
     "min_score_threshold", 0.05, "The minimum score thresholds in order to draw boxes."
 )
@@ -270,7 +272,7 @@ def main(unused_argv):
             print(" - Loading the checkpoint...")
             saver.restore(sess, FLAGS.checkpoint_path)
 
-            image_files = tf.gfile.Glob("GCS_FOLDER/*")
+            image_files = tf.gfile.Glob(f"{FLAGS.image_files_pattern.rstrip('/')}/*")
             for source_index, image_file in enumerate(image_files):
 
                 print(f" - Processing image {source_index}...")
@@ -323,6 +325,6 @@ def main(unused_argv):
 if __name__ == "__main__":
     flags.mark_flag_as_required("model")
     flags.mark_flag_as_required("checkpoint_path")
-    flags.mark_flag_as_required("image_file")
+    flags.mark_flag_as_required("image_files_pattern")
     logging.set_verbosity(logging.INFO)
     tf.app.run(main)
