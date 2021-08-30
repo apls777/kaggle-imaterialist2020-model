@@ -297,7 +297,7 @@ def main(unused_argv):
                 for k, v in six.iteritems(predictions_):
                     predictions_[k] = np.expand_dims(predictions_[k], axis=0)
 
-                predictions3 = coco_utils.convert_predictions_to_coco_annotations(
+                coco_annotations = coco_utils.convert_predictions_to_coco_annotations(
                     predictions_,
                     output_image_size=1024,
                     score_threshold=FLAGS.min_score_threshold,
@@ -305,14 +305,14 @@ def main(unused_argv):
 
                 seg_list = []
 
-                for j in range(len(predictions3)):
+                for j in range(len(coco_annotations)):
                     seg = Segmentation(
-                        image_id=predictions3[j]["image_id"],
+                        image_id=coco_annotations[j]["image_id"],
                         filename=os.path.basename(image_file),
-                        segmentation=predictions3[j]["segmentation"],
-                        imat_category_id=predictions3[j]["category_id"],
-                        score=predictions3[j]["score"],
-                        mask_mean_score=predictions3[j]["mask_mean_score"],
+                        segmentation=coco_annotations[j]["segmentation"],
+                        imat_category_id=coco_annotations[j]["category_id"],
+                        score=coco_annotations[j]["score"],
+                        mask_mean_score=coco_annotations[j]["mask_mean_score"],
                     )
 
                     seg_list.append(asdict(seg))
