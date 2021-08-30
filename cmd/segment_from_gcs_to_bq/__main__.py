@@ -33,6 +33,7 @@ class COCORLE(TypedDict):
 
 @dataclass(frozen=True)
 class Segmentation:
+    image_id: int
     filename: str
     segmentation: COCORLE
     imat_category_id: int
@@ -176,6 +177,7 @@ import base64
 import csv
 import io
 import json
+import os
 from dataclasses import asdict
 
 import numpy as np
@@ -276,6 +278,7 @@ def main(unused_argv):
             for source_index, image_file in enumerate(image_files):
 
                 print(f" - Processing image {source_index}...")
+                print(os.path.basename(image_file))
 
                 with tf.gfile.GFile(image_file, "rb") as f:
                     image_bytes = f.read()
@@ -294,12 +297,6 @@ def main(unused_argv):
                 for k, v in six.iteritems(predictions2):
                     predictions2[k] = np.expand_dims(predictions2[k], axis=0)
 
-                # やりたいこと: convert_..._annotatoins で predictions に source_id がないと言われないようにすること
-                # outputs には source_id があるが、 build_predictions で source_id が pred_source_id, gt_source_id に改名されて predictions に入る
-                # convert_..._annotataions にわたす predictions は predictions_np ではなく coco_evaluator の self.predictions
-                # 渡される前に evaluator.update() で更新されている
-                # evaluator.update の内部で pred_source_id, gt_source_id が source_id に戻されてるんじゃないかという仮設が立つ
-                # もし、そうなら、 update の処理をここに挟めばいいだけ
                 predictions3 = coco_utils.convert_predictions_to_coco_annotations(
                     predictions2,
                     output_image_size=1024,
@@ -310,7 +307,8 @@ def main(unused_argv):
 
                 for j in range(len(predictions3)):
                     seg = Segmentation(
-                        filename=predictions3[j]["image_id"],
+                        image_id=predictions3[j]["image_id"],
+                        filename=os.path.basename(image_file),
                         segmentation=predictions3[j]["segmentation"],
                         imat_category_id=predictions3[j]["category_id"],
                         score=predictions3[j]["score"],
