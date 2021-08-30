@@ -288,17 +288,17 @@ def main(unused_argv):
                     feed_dict={image_input: image_bytes, source_id: source_index},
                 )
 
-                predictions2 = {}
+                predictions_ = {}
                 for key, val in predictions_np.items():
                     # print(key, val)
                     if key[0:5] == "pred_":
-                        predictions2[key[5::]] = val
+                        predictions_[key[5::]] = val
 
-                for k, v in six.iteritems(predictions2):
-                    predictions2[k] = np.expand_dims(predictions2[k], axis=0)
+                for k, v in six.iteritems(predictions_):
+                    predictions_[k] = np.expand_dims(predictions_[k], axis=0)
 
                 predictions3 = coco_utils.convert_predictions_to_coco_annotations(
-                    predictions2,
+                    predictions_,
                     output_image_size=1024,
                     score_threshold=FLAGS.min_score_threshold,
                 )
