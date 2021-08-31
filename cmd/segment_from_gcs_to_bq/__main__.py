@@ -74,7 +74,7 @@ flags.DEFINE_string(
     "override in addition to the `config_file`.",
 )
 flags.DEFINE_string(
-    "image_files_pattern", "", "The glob that specifies the image file pattern."
+    "image_file_pattern", "", "The glob that specifies the image file pattern."
 )
 flags.DEFINE_string("project_id", "", "the ID of Google Cloud Storage Project")
 flags.DEFINE_string("result_table", "", "the ID of BigQuery table")
@@ -161,7 +161,7 @@ def main(unused_argv):
             print(" - Loading the checkpoint...")
             saver.restore(sess, FLAGS.checkpoint_path)
 
-            image_files = tf.gfile.Glob(f"{FLAGS.image_files_pattern.rstrip('/')}/*")
+            image_files = tf.gfile.Glob(f"{FLAGS.image_file_pattern.rstrip('/')}/*")
             for source_index, image_file in enumerate(image_files):
 
                 print(f" - Processing image {source_index}...")
@@ -217,7 +217,7 @@ def main(unused_argv):
 if __name__ == "__main__":
     flags.mark_flag_as_required("model")
     flags.mark_flag_as_required("checkpoint_path")
-    flags.mark_flag_as_required("image_files_pattern")
+    flags.mark_flag_as_required("image_file_pattern")
     flags.mark_flag_as_required("project_id")
     flags.mark_flag_as_required("result_table")
     logging.set_verbosity(logging.INFO)
