@@ -165,7 +165,6 @@ def main(unused_argv):
             for source_index, image_file in enumerate(image_files):
 
                 print(f" - Processing image {source_index}...")
-                print(os.path.basename(image_file))
 
                 with tf.gfile.GFile(image_file, "rb") as f:
                     image_bytes = f.read()
@@ -209,7 +208,6 @@ def main(unused_argv):
                     )
 
                     seg_list.append(asdict(seg))
-                print(seg_list)
 
                 insert_bq(bq_client, FLAGS.result_table, seg_list)
 
