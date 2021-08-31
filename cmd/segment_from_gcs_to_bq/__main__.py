@@ -24,7 +24,7 @@ from __future__ import absolute_import, annotations, division, print_function
 
 import os
 from dataclasses import asdict, dataclass
-from typing import NewType
+from typing import List, NewType
 
 import numpy as np
 import six
@@ -33,6 +33,7 @@ from absl import flags, logging
 from configs import factory as config_factory
 from dataloader import mode_keys
 from evaluation import coco_utils
+from google.cloud import bigquery
 from hyperparameters import params_dict
 from modeling import factory as model_factory
 from typing_extensions import TypedDict
@@ -75,9 +76,26 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     "image_files_pattern", "", "The glob that specifies the image file pattern."
 )
+flags.DEFINE_string("project_id", "", "the ID of Google Cloud Storage Project")
+flags.DEFINE_string("result_table", "", "the ID of BigQuery table")
 flags.DEFINE_float(
     "min_score_threshold", 0.05, "The minimum score thresholds in order to draw boxes."
 )
+
+
+def insert_bq(
+    bq_client: bigquery.Client,
+    result_table: str,
+    rows_to_insert: List[Segmentation],
+) -> None:
+
+    errors = bq_client.insert_rows_json(
+        result_table, rows_to_insert
+    )  # Make an API request.
+    if errors == []:
+        print("New rows have been added.")
+    else:
+        print("Encountered errors while inserting rows: {}".format(errors))
 
 
 def main(unused_argv):
@@ -137,6 +155,9 @@ def main(unused_argv):
         saver = tf.train.Saver()
 
         with tf.Session() as sess:
+
+            bq_client = bigquery.Client(project=FLAGS.project_id)
+
             print(" - Loading the checkpoint...")
             saver.restore(sess, FLAGS.checkpoint_path)
 
@@ -172,6 +193,12 @@ def main(unused_argv):
                 seg_list = []
 
                 for j in range(len(coco_annotations)):
+
+                    # byte型だとjsonに変換できないので
+                    coco_annotations[j]["segmentation"]["counts"] = str(
+                        coco_annotations[j]["segmentation"]["counts"]
+                    )
+
                     seg = Segmentation(
                         image_id=coco_annotations[j]["image_id"],
                         filename=os.path.basename(image_file),
@@ -182,13 +209,16 @@ def main(unused_argv):
                     )
 
                     seg_list.append(asdict(seg))
-
                 print(seg_list)
+
+                insert_bq(bq_client, FLAGS.result_table, seg_list)
 
 
 if __name__ == "__main__":
     flags.mark_flag_as_required("model")
     flags.mark_flag_as_required("checkpoint_path")
     flags.mark_flag_as_required("image_files_pattern")
+    flags.mark_flag_as_required("project_id")
+    flags.mark_flag_as_required("result_table")
     logging.set_verbosity(logging.INFO)
     tf.app.run(main)
