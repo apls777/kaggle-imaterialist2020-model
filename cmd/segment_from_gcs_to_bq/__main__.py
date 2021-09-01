@@ -145,9 +145,8 @@ def main(unused_argv):
             images_info[:, 2:3, :], [1, 1, 2]
         )
 
-        # outputs["image_info"] = images_info
-        # predictions = outputs
         predictions = model.build_predictions(outputs, {"image_info": images_info})
+
         source_id = tf.placeholder(dtype=tf.int32)
         predictions["pred_source_id"] = tf.expand_dims(source_id, axis=0)
 
@@ -176,7 +175,6 @@ def main(unused_argv):
 
                 predictions_ = {}
                 for key, val in predictions_np.items():
-                    # print(key, val)
                     if key[0:5] == "pred_":
                         predictions_[key[5::]] = val
 
@@ -193,7 +191,7 @@ def main(unused_argv):
 
                 for j in range(len(coco_annotations)):
 
-                    # byte型だとjsonに変換できないので
+                    # In the case of byte type, it cannot be converted to json
                     coco_annotations[j]["segmentation"]["counts"] = str(
                         coco_annotations[j]["segmentation"]["counts"]
                     )
