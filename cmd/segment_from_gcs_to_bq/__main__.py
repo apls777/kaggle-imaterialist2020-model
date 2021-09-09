@@ -24,6 +24,7 @@ from __future__ import absolute_import, annotations, division, print_function
 
 import os
 from dataclasses import asdict, dataclass
+from time import sleep
 from typing import NewType
 
 import numpy as np
@@ -98,6 +99,7 @@ def load_and_preprocess_image(path):
 
 def input_fn(data_files_pattern, batch_size):
     filenames = tf.io.gfile.glob(data_files_pattern)
+    print("FILENAMES: ", filenames)
     dataset = tf.data.Dataset.from_tensor_slices(filenames)
     dataset = dataset.map(
         load_and_preprocess_image, num_parallel_calls=tf.data.experimental.AUTOTUNE
@@ -180,11 +182,13 @@ def main(unused_argv):
             while True:
                 try:
                     image_batch, image_info_batch = itr.get_next()
-                    print("image_batch: ", image_batch)
-                    print("image_info_batch: ", image_info_batch)
 
-                    image_batch_np = sess.run(image_batch)
-                    image_info_batch_np = sess.run(image_info_batch)
+                    with tf.Session() as child_sess:
+                        image_batch_np = child_sess.run(image_batch)
+                        image_info_batch_np = child_sess.run(image_info_batch)
+                    print("image_batch_np: ", image_batch_np.shape)
+                    print("image_info_batch_np: ", image_info_batch_np.shape)
+
                     predictions_np = sess.run(
                         predictions,
                         feed_dict={
@@ -194,15 +198,24 @@ def main(unused_argv):
                         },
                     )
                     print(" --- INFERENCE FINISHED")
-                    print(predictions_np)
 
                     predictions_ = {}
+                    print(f'pred_source_id: {predictions_np["pred_source_id"].shape}')
                     for key, val in predictions_np.items():
-                        if key[0:5] == "pred_":
-                            predictions_[key[5::]] = val
+                        new_val = np.expand_dims(val, axis=0)
+                        if key == "pred_source_id":
+                            new_key = "source_id"
+                            predictions_[new_key] = val
+                        elif key[0:5] == "pred_":
+                            new_key = key[5::]
+                            predictions_[new_key] = new_val
+                        else:
+                            new_key = key
+                            predictions_[new_key] = new_val
+                        print(f"{new_key}: {predictions_[new_key].shape}")
 
-                    for k, v in six.iteritems(predictions_):
-                        predictions_[k] = np.expand_dims(predictions_[k], axis=0)
+                    # for k, v in predictions_.items():
+                    #     predictions_[k] = np.expand_dims(v, axis=0)
 
                     coco_annotations = (
                         coco_utils.convert_predictions_to_coco_annotations(
