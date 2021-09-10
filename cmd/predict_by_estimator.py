@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from typing import NewType
 
 import numpy as np
@@ -9,34 +8,12 @@ import tensorflow_core._api.v1.compat.v1 as tf
 import typer
 from configs import factory as config_factory
 from dataloader import mode_keys
-from evaluation import coco_utils
+from evaluation.submission import get_new_image_size
 from hyperparameters import params_dict
 from modeling import factory as model_factory
+from pycocotools import mask as mask_api
 from typing_extensions import TypedDict
-from utils import input_utils
-
-Height = NewType("Height", int)
-Width = NewType("Width", int)
-RLE = NewType("RLE", str)
-
-
-class COCORLE(TypedDict):
-    size: tuple[Height, Width]
-    counts: RLE
-
-
-@dataclass(frozen=True)
-class Segmentation:
-    image_id: int
-    filename: str
-    segmentation: COCORLE
-    imat_category_id: int
-    score: float
-    mask_mean_score: float
-
-    def __repr__(self):
-        return f"image_id: {self.image_id}, filename: {self.filename}, category: {self.imat_category_id}"
-
+from utils import box_utils, input_utils, mask_utils
 
 DUMMY_FILENAME = "DUMMY_FILENAME"
 
@@ -60,10 +37,6 @@ def load_and_preprocess_image(path: str, image_size: int):
 
     Returns
     -------
-    image_info: tf.Tensor
-        dtype = tf.float32
-        shape = (original|desired|scale|offset=4, height(y)|width(x)=2)
-
     c.f.,
         tf_tpu_models/official/detection/main.py @ FLAGS.mode == "predict"
         -> tf_tpu_models/official/detection/dataloader/input_reader.InputFn._parser_fn
@@ -99,6 +72,7 @@ def load_and_preprocess_image(path: str, image_size: int):
         lambda: dummy_image,
         lambda: load_image(path),
     )
+    # tf.print(path, tf.shape(image))
 
     image = input_utils.normalize_image(image)
     resize_shape = [image_size, image_size]
@@ -115,13 +89,12 @@ def load_and_preprocess_image(path: str, image_size: int):
 
 
 class InputFn:
-    def __init__(self, filenames: str, batch_size: int, image_size: int):
+    def __init__(self, filenames: list[str], batch_size: int, image_size: int):
         self.filenames = filenames
         self.batch_size = batch_size
         self.image_size = image_size
 
     def __call__(self):
-        print("FILENAMES: ", self.filenames)
         self.filenames += [
             DUMMY_FILENAME for _ in range(len(self.filenames) % self.batch_size)
         ]
@@ -146,7 +119,7 @@ class ModelFn:
         """Returns a EstimatorSpec for prediction.
 
         c.f.,
-            tf_tpu_models/official/detection/main.py @ model_fn = model_builder.ModelFn(params)
+            tf_tpu_models/official/detection/main.py @ model_fn = model_builder.ModelFn(params)  # noqa: E501
             > tf_tpu_models/official/detection/modeling/model_builder.ModelFn
             > tf_tpu_models/official/detection/modeling/base_model.BaseModel.predict
 
@@ -173,6 +146,105 @@ class ModelFn:
         )
 
 
+Height = NewType("Height", int)
+Width = NewType("Width", int)
+RLE = NewType("RLE", str)
+
+
+class COCORLE(TypedDict):
+    size: tuple[Height, Width]
+    counts: RLE
+
+
+class Prediction(TypedDict):
+    filename: str
+    pred_source_id: int
+    pred_num_detctions: int
+    pred_image_info: np.array  # (2, 2)=(orginal|scale, height|width)  # noqa: E501
+    pred_detection_boxes: np.array  # (num_detections, 4)
+    pred_detection_classes: np.array  # (num_detections, )
+    pred_detection_scores: np.array  # (num_detections, )
+    pred_detection_masks: np.array  # (num_detections, mask_height, mask_width)
+
+
+class COCOAnnotation(TypedDict):
+    image_id: int
+    filename: str
+    category_id: int
+    bbox: list[float]
+    score: float
+    segmentation: COCORLE
+    mask_mean_score: float
+
+
+def encode_mask_fn(x) -> COCORLE:
+    encoded_mask = mask_api.encode(np.asfortranarray(x))
+    # In the case of byte type, it cannot be converted to json
+    encoded_mask["counts"] = str(encoded_mask["counts"])
+    return encoded_mask
+
+
+def convert_predictions_to_coco_annotations(
+    prediction: Prediction,
+    output_image_size: int = None,
+    score_threshold=0.05,
+) -> list[COCOAnnotation]:
+    prediction["pred_detection_boxes"] = box_utils.yxyx_to_xywh(
+        prediction["pred_detection_boxes"]
+    )
+
+    mask_boxes = prediction["pred_detection_boxes"]
+
+    image_id = prediction["pred_source_id"]
+    orig_image_size = prediction["pred_image_info"][0]
+    # image_info: (2, 2)=(orginal|scale, height|width)  # noqa: E501
+
+    if output_image_size:
+        eval_image_size = get_new_image_size(orig_image_size, output_image_size)
+    else:
+        eval_image_size = orig_image_size
+
+    eval_scale = orig_image_size[0] / eval_image_size[0]
+
+    bbox_indices = np.argwhere(
+        prediction["pred_detection_scores"] >= score_threshold
+    ).flatten()
+
+    predicted_masks = prediction["pred_detection_masks"][bbox_indices]
+    image_masks = mask_utils.paste_instance_masks(
+        predicted_masks,
+        mask_boxes[bbox_indices].astype(np.float32) / eval_scale,
+        int(eval_image_size[0]),
+        int(eval_image_size[1]),
+    )
+    binary_masks = (image_masks > 0.0).astype(np.uint8)
+    encoded_masks = [encode_mask_fn(binary_mask) for binary_mask in list(binary_masks)]
+
+    mask_masks = (predicted_masks > 0.5).astype(np.float32)
+    mask_areas = mask_masks.sum(axis=-1).sum(axis=-1)
+    mask_mean_scores = (
+        (predicted_masks * mask_masks).sum(axis=-1).sum(axis=-1) / mask_areas
+    ).tolist()
+
+    coco_annotations: list[COCOAnnotation] = []
+    for m, k in enumerate(bbox_indices):
+        ann: COCOAnnotation
+        ann = {
+            "image_id": int(image_id),
+            "filename": prediction["filename"],
+            "category_id": int(prediction["pred_detection_classes"][k]),
+            "bbox": (
+                prediction["pred_detection_boxes"][k].astype(np.float32) / eval_scale
+            ).tolist(),
+            "score": float(prediction["pred_detection_scores"][k]),
+            "segmentation": encoded_masks[m],
+            "mask_mean_score": mask_mean_scores[m],
+        }
+        coco_annotations.append(ann)
+
+    return coco_annotations
+
+
 def main(
     config_file: str = typer.Option(...),
     checkpoint_path: str = typer.Option(...),
@@ -192,51 +264,40 @@ def main(
     )
 
     image_files_pattern = f"{image_dir.rstrip('/')}/*"
-    filenames: list[str] = tf.io.gfile.glob(image_files_pattern)
+    image_files: list[str] = tf.io.gfile.glob(image_files_pattern)
 
     predictor = estimator.predict(
         input_fn=InputFn(
-            filenames=filenames,
+            filenames=image_files,
             batch_size=batch_size,
             image_size=image_size,
         ),
         checkpoint_path=checkpoint_path,
-        yield_single_examples=False,
+        yield_single_examples=True,
     )
 
-    for b, predictions in enumerate(predictor):
-        # c.f., tf_tpu_models/official/detection/executor/tpu_executor.TPUExecutor.predict
-        predictions_ = {k.replace("pred_", ""): [v] for k, v in predictions.items()}
+    prediction: Prediction
+    for source_id, prediction in enumerate(predictor):
+        filename = os.path.basename(image_files[source_id])
 
-        # Add "source_id" because `labels` doesn't have ["groundtruth"]["source_id"]
-        source_ids = [
-            np.array([filenames.index(fn) for fn in filenames[b * batch_size : (b+1) * batch_size]])
-        ]
-        predictions_["source_id"] = source_ids
-        # shape=(num_batches, batch_size, )
+        if filename != DUMMY_FILENAME:
+            prediction["filename"] = os.path.basename(image_files[source_id])
+            # Add "pred_source_id" because `labels` doesn't have ["groundtruth"]["source_id"]  # noqa: E501
+            prediction["pred_source_id"] = source_id
 
-        coco_annotations = coco_utils.convert_predictions_to_coco_annotations(
-            predictions_,
-            output_image_size=1024,
-            score_threshold=min_score_threshold,
-        )
+            coco_annotations = convert_predictions_to_coco_annotations(
+                prediction=prediction,
+                # output_image_size=1024,
+                score_threshold=min_score_threshold,
+            )
 
-        for ann in coco_annotations:
-            source_id = ann["image_id"]
-            filename = os.path.basename(filenames[source_id])
-            if filename != DUMMY_FILENAME:
-                # In the case of byte type, it cannot be converted to json
-                ann["segmentation"]["counts"] = str(ann["segmentation"]["counts"])
-
-                seg = Segmentation(
-                    image_id=source_id,
-                    filename=filename,
-                    segmentation=ann["segmentation"],
-                    imat_category_id=ann["category_id"],
-                    score=ann["score"],
-                    mask_mean_score=ann["mask_mean_score"],
+            for ann in coco_annotations:
+                print(
+                    f'image_id:{ann["image_id"]}, '
+                    f'filename:{ann["filename"]}, '
+                    f'category_id:{ann["category_id"]}, '
+                    f'segmentation:{ann["segmentation"]["size"]}'
                 )
-                print(seg)
 
 
 if __name__ == "__main__":
