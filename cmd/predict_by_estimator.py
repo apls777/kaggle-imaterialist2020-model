@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import NewType
 
@@ -32,6 +33,19 @@ class Segmentation:
     imat_category_id: int
     score: float
     mask_mean_score: float
+
+    def __repr__(self):
+        return f"image_id: {self.image_id}, filename: {self.filename}, category: {self.imat_category_id}"
+
+
+DUMMY_FILENAME = "DUMMY_FILENAME"
+
+
+def load_image(path: str) -> tf.Tensor:
+    image = tf.io.read_file(path)
+    image = tf.io.decode_image(image, channels=3)
+    image.set_shape([None, None, 3])
+    return image
 
 
 def load_and_preprocess_image(path: str, image_size: int):
@@ -75,9 +89,16 @@ def load_and_preprocess_image(path: str, image_size: int):
             shape [height_l, width_l, 4] representing anchor boxes at each
             level.
     """
-    image = tf.io.read_file(path)
-    image = tf.io.decode_image(image, channels=3)
-    image.set_shape([None, None, 3])
+
+    # pad the last batch with dummy images to fix batch_size
+    dummy_image = tf.zeros([image_size, image_size, 3], dtype=tf.uint8)
+    dummy_image.set_shape([None, None, 3])
+
+    image = tf.cond(
+        tf.math.equal(path, DUMMY_FILENAME),
+        lambda: dummy_image,
+        lambda: load_image(path),
+    )
 
     image = input_utils.normalize_image(image)
     resize_shape = [image_size, image_size]
@@ -101,13 +122,18 @@ class InputFn:
 
     def __call__(self):
         print("FILENAMES: ", self.filenames)
+        self.filenames += [
+            DUMMY_FILENAME for _ in range(len(self.filenames) % self.batch_size)
+        ]
         dataset = tf.data.Dataset.from_tensor_slices(self.filenames)
         dataset = dataset.map(
             lambda p: load_and_preprocess_image(p, image_size=self.image_size),
             num_parallel_calls=tf.data.experimental.AUTOTUNE,
         )
 
-        dataset = dataset.batch(self.batch_size, drop_remainder=False)
+        # The last smaller batch is not actually dropped
+        # because it is padded with dummy images.
+        dataset = dataset.batch(self.batch_size, drop_remainder=True)
         dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
         return dataset
 
@@ -135,19 +161,10 @@ class ModelFn:
         # because only `features` passed to this function
         # in Estimator.predict.
         images = features["images"]
+        # images: (height, widht, RGB=3)
         labels = features["labels"]
 
-        # batch_size = images.get_shape().as_list()[0]
-        # # shape = tf.shape(images)
-        # # print(shape)
-        # images.set_shape(shape)
         outputs = self._model.build_outputs(images, labels, mode=mode_keys.PREDICT)
-        # Log model statistics.
-        # batch_size = images.get_shape().as_list()[0]
-        # _, _ = benchmark_utils.compute_model_statistics(
-        #     batch_size=batch_size,
-        #     json_file_path=os.path.join(self._model_dir, "predict_model_stats.json"),
-        # )
 
         predictions = self._model.build_predictions(outputs, labels)
 
@@ -175,7 +192,7 @@ def main(
     )
 
     image_files_pattern = f"{image_dir.rstrip('/')}/*"
-    filenames = tf.io.gfile.glob(image_files_pattern)
+    filenames: list[str] = tf.io.gfile.glob(image_files_pattern)
 
     predictor = estimator.predict(
         input_fn=InputFn(
@@ -187,16 +204,16 @@ def main(
         yield_single_examples=False,
     )
 
-    for predictions in predictor:
+    for b, predictions in enumerate(predictor):
         # c.f., tf_tpu_models/official/detection/executor/tpu_executor.TPUExecutor.predict
         predictions_ = {k.replace("pred_", ""): [v] for k, v in predictions.items()}
 
         # Add "source_id" because `labels` doesn't have ["groundtruth"]["source_id"]
-        # TODO: add actual `source_id`
-        batch_size = predictions_["image_info"][0].shape[0]
-        dummy_source_ids = [np.arange(batch_size)]
-        predictions_["source_id"] = dummy_source_ids
-        # shape=(num_batches, batch_size, *)
+        source_ids = [
+            np.array([filenames.index(fn) for fn in filenames[b * batch_size : (b+1) * batch_size]])
+        ]
+        predictions_["source_id"] = source_ids
+        # shape=(num_batches, batch_size, )
 
         coco_annotations = coco_utils.convert_predictions_to_coco_annotations(
             predictions_,
@@ -205,20 +222,21 @@ def main(
         )
 
         for ann in coco_annotations:
+            source_id = ann["image_id"]
+            filename = os.path.basename(filenames[source_id])
+            if filename != DUMMY_FILENAME:
+                # In the case of byte type, it cannot be converted to json
+                ann["segmentation"]["counts"] = str(ann["segmentation"]["counts"])
 
-            # In the case of byte type, it cannot be converted to json
-            ann["segmentation"]["counts"] = str(ann["segmentation"]["counts"])
-
-            # TODO: add correct filename from source_id
-            seg = Segmentation(
-                image_id=ann["image_id"],
-                filename="DUMMY FILENAME",
-                segmentation=ann["segmentation"],
-                imat_category_id=ann["category_id"],
-                score=ann["score"],
-                mask_mean_score=ann["mask_mean_score"],
-            )
-            print(seg)
+                seg = Segmentation(
+                    image_id=source_id,
+                    filename=filename,
+                    segmentation=ann["segmentation"],
+                    imat_category_id=ann["category_id"],
+                    score=ann["score"],
+                    mask_mean_score=ann["mask_mean_score"],
+                )
+                print(seg)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ segmentation = {git = "https://github.com/hrsma2i/segmentation.git", rev = "1c39
 typer = "^0.3.2"
 # This CLI can't work with numpy 1.18.5 or higher.
 numpy = "<=1.18.5"
+typing-extensions = "^3.10.0"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.0"
