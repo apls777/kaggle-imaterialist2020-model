@@ -9,6 +9,9 @@ import typer
 from configs import factory as config_factory
 from dataloader import mode_keys
 from evaluation.submission import get_new_image_size
+from google.cloud import bigquery
+from google.cloud.bigquery import SchemaField
+from google.cloud.bigquery.enums import SqlTypeNames
 from hyperparameters import params_dict
 from modeling import factory as model_factory
 from pycocotools import mask as mask_api
@@ -162,7 +165,7 @@ class COCOAnnotation(TypedDict):
     image_id: int
     filename: str
     category_id: int
-    bbox: list[float]
+    # bbox: list[float]
     score: float
     segmentation: COCORLE
     mask_mean_score: float
@@ -224,9 +227,9 @@ def convert_predictions_to_coco_annotations(
             "image_id": int(image_id),
             "filename": prediction["filename"],
             "category_id": int(prediction["pred_detection_classes"][k]),
-            "bbox": (
-                prediction["pred_detection_boxes"][k].astype(np.float32) / eval_scale
-            ).tolist(),
+            # "bbox": (
+            #    prediction["pred_detection_boxes"][k].astype(np.float32) / eval_scale
+            # ).tolist(),
             "score": float(prediction["pred_detection_scores"][k]),
             "segmentation": encoded_masks[m],
             "mask_mean_score": mask_mean_scores[m],
@@ -236,14 +239,64 @@ def convert_predictions_to_coco_annotations(
     return coco_annotations
 
 
+def insert_bq(
+    bq_client: bigquery.Client,
+    result_table: bigquery.Table | bigquery.TableReference | str,
+    rows_to_insert: list[COCOAnnotation],
+) -> None:
+
+    errors = bq_client.insert_rows(result_table, rows_to_insert)  # Make an API request.
+    if errors == []:
+        print("New rows have been added.")
+    else:
+        print("Encountered errors while inserting rows: {}".format(errors))
+
+
+def create_table(
+    client: bigquery.Client,
+    dataset_id: str,
+    table_id: str,
+) -> bigquery.Table:
+    dataset_ref = client.dataset(dataset_id)
+    table_ref = dataset_ref.table(table_id)
+
+    schema = [
+        SchemaField("image_id", SqlTypeNames.INTEGER, mode="REQUIRED"),
+        SchemaField("filename", SqlTypeNames.STRING, mode="REQUIRED"),
+        SchemaField("category_id", SqlTypeNames.INTEGER, mode="REQUIRED"),
+        SchemaField("score", SqlTypeNames.FLOAT, mode="REQUIRED"),
+        SchemaField(
+            "segmentation",
+            SqlTypeNames.RECORD,
+            mode="REQUIRED",
+            fields=[
+                SchemaField("size", SqlTypeNames.INTEGER, mode="REPEATED"),
+                SchemaField("counts", SqlTypeNames.STRING, mode="REQUIRED"),
+            ],
+        ),
+        SchemaField("mask_mean_score", SqlTypeNames.FLOAT, mode="REQUIRED"),
+    ]
+
+    table = bigquery.Table(table_ref, schema=schema)
+    table = client.create_table(table, exists_ok=True)
+    return table
+
+
 def main(
     config_file: str = typer.Option(...),
     checkpoint_path: str = typer.Option(...),
     image_dir: str = typer.Option(...),
+    project_id: str = typer.Option(...),
+    dataset_id: str = typer.Option(...),
+    table_id: str = typer.Option(...),
     batch_size: int = 2,
     image_size: int = 640,
     min_score_threshold: float = 0.05,
 ):
+
+    bq_client = bigquery.Client(project=project_id)
+    table = create_table(client=bq_client, dataset_id=dataset_id, table_id=table_id)
+
     params = config_factory.config_generator("mask_rcnn")
     if config_file:
         params = params_dict.override_params_dict(params, config_file, is_strict=True)
@@ -282,13 +335,7 @@ def main(
                 score_threshold=min_score_threshold,
             )
 
-            for ann in coco_annotations:
-                print(
-                    f'image_id:{ann["image_id"]}, '
-                    f'filename:{ann["filename"]}, '
-                    f'category_id:{ann["category_id"]}, '
-                    f'segmentation:{ann["segmentation"]["size"]}'
-                )
+            insert_bq(bq_client, table, coco_annotations)
 
 
 if __name__ == "__main__":
