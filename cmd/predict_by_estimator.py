@@ -25,8 +25,22 @@ def load_image(path: str) -> tf.Tensor:
     return image
 
 
-def load_and_preprocess_image(path: str, image_size: int):
-    """[summary]
+class Label(TypedDict):
+    image_info: tf.Tensor  # (2, 2)=(original|scale, height, width)
+
+
+class Feature(TypedDict):
+    images: tf.Tensor  # (height, width, RGB=3)
+    labels: Label
+
+
+def load_and_preprocess_image(path: str, image_size: int) -> Feature:
+    """
+    c.f.,
+        tf_tpu_models/official/detection/main.py @ FLAGS.mode == "predict"
+        -> tf_tpu_models/official/detection/dataloader/input_reader.InputFn._parser_fn
+        -> dataloader.maskrcnn_parser.Parser._parse_predict_data
+            (parse loaded TF Record data to image and labels)
 
     Parameters
     ----------
@@ -37,32 +51,8 @@ def load_and_preprocess_image(path: str, image_size: int):
 
     Returns
     -------
-    c.f.,
-        tf_tpu_models/official/detection/main.py @ FLAGS.mode == "predict"
-        -> tf_tpu_models/official/detection/dataloader/input_reader.InputFn._parser_fn
-        -> dataloader.maskrcnn_parser.Parser._parse_predict_data
-            (parse loaded TF Record data to image and labels)
-
-    image: tf.Tensor
-        dtype = tf.float32
-        shape = (height, width, RGB=3)
-        image tensor that is preproessed to have normalized value and
-
-    labels: dict[str, tf.Tensor]
-        a dictionary of tensors used for training. The following
-        describes {key: value} pairs in the dictionary.
-
-        source_ids: Source image id. Default value -1 if the source id is
-            empty in the groundtruth annotation.
-        image_info: a 2D `Tensor` that encodes the information of the image
-            and the applied preprocessing. It is in the format of
-            [[original_height, original_width], [scaled_height, scaled_width],
-        anchor_boxes: ordered dictionary with keys
-            [min_level, min_level+1, ..., max_level]. The values are tensor with
-            shape [height_l, width_l, 4] representing anchor boxes at each
-            level.
+    Feature
     """
-
     # pad the last batch with dummy images to fix batch_size
     dummy_image = tf.zeros([image_size, image_size, 3], dtype=tf.uint8)
     dummy_image.set_shape([None, None, 3])
@@ -81,9 +71,9 @@ def load_and_preprocess_image(path: str, image_size: int):
     )
     image.set_shape([resize_shape[0], resize_shape[1], 3])
 
-    labels = {"image_info": image_info}
+    labels: Label = {"image_info": image_info}
 
-    feature = {"images": image, "labels": labels}
+    feature: Feature = {"images": image, "labels": labels}
 
     return feature
 
@@ -95,6 +85,7 @@ class InputFn:
         self.image_size = image_size
 
     def __call__(self):
+        # pad the last batch with dummy images to fix batch_size
         self.filenames += [
             DUMMY_FILENAME for _ in range(len(self.filenames) % self.batch_size)
         ]
