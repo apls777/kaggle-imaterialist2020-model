@@ -334,8 +334,8 @@ def main(
                 # output_image_size=1024,
                 score_threshold=min_score_threshold,
             )
-            print(coco_annotations[0]["image_id"])
-            # insert_bq(bq_client, table, coco_annotations)
+
+            insert_bq(bq_client, table, coco_annotations)
 
 
 if __name__ == "__main__":
