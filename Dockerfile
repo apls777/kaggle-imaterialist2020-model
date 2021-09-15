@@ -9,7 +9,6 @@ ENV LANG=C.UTF-8
 ENV DEBIAN_FRONTEND noninteractive
 WORKDIR /kaggle-imaterialist2020-model
 
-
 ### Install Python ###
 FROM base AS py-install
 RUN apt-get update && apt-get install -y \
@@ -30,9 +29,9 @@ RUN apt-get update && apt-get install -y \
   libffi-dev \
   liblzma-dev
 ENV PYTHON_VERSION=3.7.10
-RUN curl -O https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz \
-  && tar zxvf Python-${PYTHON_VERSION}.tgz && cd Python-${PYTHON_VERSION} && ./configure && make && make install \
-  && cd ../ && rm -r Python-${PYTHON_VERSION} Python-${PYTHON_VERSION}.tgz
+RUN curl -O https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz && \
+  tar zxvf Python-${PYTHON_VERSION}.tgz && cd Python-${PYTHON_VERSION} && ./configure && make && make install && \
+  cd ../ && rm -r Python-${PYTHON_VERSION} Python-${PYTHON_VERSION}.tgz
 # Update pip to quickly install grpc libraries
 RUN pip3 install -U pip
 RUN apt-get -y install git
@@ -46,5 +45,5 @@ COPY cmd/ ./cmd/
 COPY tf_tpu_models/ ./tf_tpu_models/
 COPY tools/ ./tools/
 COPY pyproject.toml poetry.lock ./
-RUN poetry config virtualenvs.create false \
-  && poetry install --no-dev
+RUN poetry config virtualenvs.create false && \
+  poetry install --no-dev
