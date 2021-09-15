@@ -8,6 +8,7 @@ This repository is forked from https://github.com/apls777/kaggle-imaterialist202
     - [Setup](#setup)
 - [Train](#train)
 - [Predict](#predict)
+- [Detection Prediction Data Flow](#detection-prediction-data-flow)
 
 <!-- /TOC -->
 
@@ -208,3 +209,10 @@ Its schema is:
 ```
 
 You can get the binary mask `numpy.ndarray` for a particular category using [hrsma2i/segmentation](https://github.com/hrsma2i/segmentation#coco-rle--numpyndarray).
+
+
+# Detection Prediction Data Flow
+
+The data flow of `tf_tpu_models/official/detection/main.py` is depicted as the following figure.
+
+![](/detection_main_predict_flow.png)
