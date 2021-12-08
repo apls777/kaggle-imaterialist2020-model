@@ -250,9 +250,7 @@ def insert_bq(
 ) -> None:
 
     errors = bq_client.insert_rows(result_table, rows_to_insert)  # Make an API request.
-    if errors == []:
-        print("New rows have been added.")
-    else:
+    if errors != []:
         print("Encountered errors while inserting rows: {}".format(errors))
 
 
