@@ -286,13 +286,16 @@ def main(
     config_file: str = typer.Option(...),
     checkpoint_path: str = typer.Option(...),
     image_dir: str = typer.Option(...),
-    project_id: str = typer.Option(...),
-    dataset_id: str = typer.Option(...),
-    table_id: str = typer.Option(...),
+    bq_table: str = typer.Option(None, help="like `project.dataset.table`"),
     batch_size: int = 2,
     image_size: int = 640,
     min_score_threshold: float = 0.05,
 ):
+
+    if bq_table is not None:
+        project_id, dataset_id, table_id = bq_table.split(".")
+    else:
+        raise ValueError("Give bq_table!")
 
     bq_client = bigquery.Client(project=project_id)
     table = create_table(client=bq_client, dataset_id=dataset_id, table_id=table_id)
