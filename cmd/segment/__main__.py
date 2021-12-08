@@ -20,6 +20,7 @@ from modeling import factory as model_factory
 from pycocotools import mask as mask_api
 from typing_extensions import TypedDict
 from utils import box_utils, input_utils, mask_utils
+from counter import Counter
 
 DUMMY_FILENAME = "DUMMY_FILENAME"
 
@@ -346,6 +347,7 @@ def main(
         yield_single_examples=True,
     )
 
+    counter = Counter(total=len(image_files))
     prediction: Prediction
     for source_id, prediction in enumerate(predictor):
         filename = os.path.basename(image_files[source_id])
@@ -361,10 +363,16 @@ def main(
                 score_threshold=min_score_threshold,
             )
 
-        if dst == Destination.BQ:
-            insert_bq(bq_client, table, coco_annotations)
-        elif dst == Destination.LOCAL:
-            out_file.write("\n".join([json.dumps(a) for a in coco_annotations]) + "\n")
+            if dst == Destination.BQ:
+                insert_bq(bq_client, table, coco_annotations)
+            elif dst == Destination.LOCAL:
+                out_file.write(
+                    "\n".join([json.dumps(a) for a in coco_annotations]) + "\n"
+                )
+
+            counter.count_success(1)
+            counter.count_processed(1)
+            counter.log_progress()
 
     if dst == Destination.LOCAL:
         out_file.close()
