@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
+from enum import Enum
+from pathlib import Path
 from typing import NewType
 
 import numpy as np
@@ -282,20 +285,43 @@ def create_table(
     return table
 
 
+class Destination(str, Enum):
+    BQ = "bq"
+    LOCAL = "local"
+
+
 def main(
-    config_file: str = typer.Option(...),
-    checkpoint_path: str = typer.Option(...),
+    config_file: str = typer.Option(
+        ...,
+        help="A config YAML file to load a trained model. "
+        "Choose from GCS URI (gs://bucket/models/foo/config.yaml) or local path (path/to/config.yaml).",
+    ),
+    checkpoint_path: str = typer.Option(
+        ...,
+        help="A Tensorflow checkpoint file to load a trained model. "
+        "Choose from GCS URI (gs://bucket/models/foo/model.ckpt-1234) or local path (path/to/model.ckpt-1234).",
+    ),
     image_dir: str = typer.Option(...),
-    project_id: str = typer.Option(...),
-    dataset_id: str = typer.Option(...),
-    table_id: str = typer.Option(...),
+    out: str = typer.Option(
+        None,
+        help="Where to save results. "
+        "Choose from BQ table (bq://project.dataset.table) or local path (/path/to/segmentation.jsonlines).",
+    ),
     batch_size: int = 2,
     image_size: int = 640,
     min_score_threshold: float = 0.05,
 ):
 
-    bq_client = bigquery.Client(project=project_id)
-    table = create_table(client=bq_client, dataset_id=dataset_id, table_id=table_id)
+    if out.startswith("bq://"):
+        project_id, dataset_id, table_id = out.lstrip("bq://").split(".")
+        bq_client = bigquery.Client(project=project_id)
+        table = create_table(client=bq_client, dataset_id=dataset_id, table_id=table_id)
+        dst = Destination.BQ
+    else:
+        out_json = Path(out)
+        out_json.parent.mkdir(exist_ok=True, parents=True)
+        out_file = out_json.open("w")
+        dst = Destination.LOCAL
 
     params = config_factory.config_generator("mask_rcnn")
     if config_file:
@@ -335,7 +361,13 @@ def main(
                 score_threshold=min_score_threshold,
             )
 
+        if dst == Destination.BQ:
             insert_bq(bq_client, table, coco_annotations)
+        elif dst == Destination.LOCAL:
+            out_file.write("\n".join([json.dumps(a) for a in coco_annotations]) + "\n")
+
+    if dst == Destination.LOCAL:
+        out_file.close()
 
 
 if __name__ == "__main__":
