@@ -222,6 +222,7 @@ def convert_predictions_to_coco_annotations(
 
     mask_masks = (predicted_masks > 0.5).astype(np.float32)
     mask_areas = mask_masks.sum(axis=-1).sum(axis=-1)
+    mask_area_fractions = (mask_areas / np.prod(predicted_masks.shape[1:])).tolist()
     mask_mean_scores = (
         (predicted_masks * mask_masks).sum(axis=-1).sum(axis=-1) / mask_areas
     ).tolist()
@@ -236,7 +237,7 @@ def convert_predictions_to_coco_annotations(
             "bbox": (
                 prediction["pred_detection_boxes"][k].astype(np.float32) / eval_scale
             ).tolist(),
-            "mask_area_fraction": float(mask_areas[m]),
+            "mask_area_fraction": float(mask_area_fractions[m]),
             "score": float(prediction["pred_detection_scores"][k]),
             "segmentation": encoded_masks[m],
             "mask_mean_score": mask_mean_scores[m],
@@ -279,6 +280,8 @@ def create_table(
                 SchemaField("counts", SqlTypeNames.STRING, mode="REQUIRED"),
             ],
         ),
+        SchemaField("bbox", SqlTypeNames.FLOAT, mode="REPEATED"),
+        SchemaField("mask_area_fraction", SqlTypeNames.FLOAT, mode="REQUIRED"),
         SchemaField("mask_mean_score", SqlTypeNames.FLOAT, mode="REQUIRED"),
     ]
 
