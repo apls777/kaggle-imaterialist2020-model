@@ -171,6 +171,7 @@ class COCOAnnotation(TypedDict):
     filename: str
     category_id: int
     bbox: list[float]
+    mask_area_fraction: float
     score: float
     segmentation: COCORLE
     mask_mean_score: float
@@ -235,6 +236,7 @@ def convert_predictions_to_coco_annotations(
             "bbox": (
                 prediction["pred_detection_boxes"][k].astype(np.float32) / eval_scale
             ).tolist(),
+            "mask_area_fraction": float(mask_areas[m]),
             "score": float(prediction["pred_detection_scores"][k]),
             "segmentation": encoded_masks[m],
             "mask_mean_score": mask_mean_scores[m],
