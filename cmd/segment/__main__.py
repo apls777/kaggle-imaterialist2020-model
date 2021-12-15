@@ -20,6 +20,7 @@ from modeling import factory as model_factory
 from pycocotools import mask as mask_api
 from typing_extensions import TypedDict
 from utils import box_utils, input_utils, mask_utils
+
 from counter import Counter
 
 DUMMY_FILENAME = "DUMMY_FILENAME"
@@ -169,7 +170,7 @@ class COCOAnnotation(TypedDict):
     image_id: int
     filename: str
     category_id: int
-    # bbox: list[float]
+    bbox: list[float]
     score: float
     segmentation: COCORLE
     mask_mean_score: float
@@ -231,9 +232,9 @@ def convert_predictions_to_coco_annotations(
             "image_id": int(image_id),
             "filename": prediction["filename"],
             "category_id": int(prediction["pred_detection_classes"][k]),
-            # "bbox": (
-            #    prediction["pred_detection_boxes"][k].astype(np.float32) / eval_scale
-            # ).tolist(),
+            "bbox": (
+                prediction["pred_detection_boxes"][k].astype(np.float32) / eval_scale
+            ).tolist(),
             "score": float(prediction["pred_detection_scores"][k]),
             "segmentation": encoded_masks[m],
             "mask_mean_score": mask_mean_scores[m],
