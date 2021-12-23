@@ -166,11 +166,25 @@ class Prediction(TypedDict):
     pred_detection_masks: np.array  # (num_detections, mask_height, mask_width)
 
 
+# TODO: 接頭辞の Bbox を取るために、
+# COCOAnnotation や convert_pred... を別ファイルに移す。
+# Bbox を付けてる理由は、 COCORLE の Width, Height と衝突するから。
+BboxLeft = NewType("BboxLeft", float)
+BboxTop = NewType("BboxTop", float)
+BboxWidth = NewType("BboxWidth", float)
+BboxHeight = NewType("BboxHeight", float)
+
+
 class COCOAnnotation(TypedDict):
     image_id: int
     filename: str
     category_id: int
-    bbox: list[float]
+    # Avoid `bbox: list[float]` because
+    # it's hard to know what each dimension means.
+    # Also avoid `dict` like `{"left", "top", "width", "heiht"}`
+    # along with the official COCO schema,
+    # which adopts `list` instead of `dict`.
+    bbox: tuple[BboxLeft, BboxTop, BboxWidth, BboxHeight]
     mask_area_fraction: float
     score: float
     segmentation: COCORLE
@@ -189,6 +203,23 @@ def convert_predictions_to_coco_annotations(
     output_image_size: int = None,
     score_threshold=0.05,
 ) -> list[COCOAnnotation]:
+    """This is made, modifying a function of the same name in
+    /tf_tpu_models/official/detection/evaluation/coco_utils.py
+
+    Parameters
+    ----------
+    prediction : Prediction
+        [description]
+    output_image_size : int, optional
+        [description], by default None
+    score_threshold : float, optional
+        [description], by default 0.05
+
+    Returns
+    -------
+    list[COCOAnnotation]
+        [description]
+    """
     prediction["pred_detection_boxes"] = box_utils.yxyx_to_xywh(
         prediction["pred_detection_boxes"]
     )
@@ -234,9 +265,11 @@ def convert_predictions_to_coco_annotations(
             "image_id": int(image_id),
             "filename": prediction["filename"],
             "category_id": int(prediction["pred_detection_classes"][k]),
-            "bbox": (
-                prediction["pred_detection_boxes"][k].astype(np.float32) / eval_scale
-            ).tolist(),
+            # Avoid `astype(np.float32)` because
+            # it can't be serialized as JSON.
+            "bbox": tuple(
+                float(x) for x in prediction["pred_detection_boxes"][k] / eval_scale
+            ),
             "mask_area_fraction": float(mask_area_fractions[m]),
             "score": float(prediction["pred_detection_scores"][k]),
             "segmentation": encoded_masks[m],
