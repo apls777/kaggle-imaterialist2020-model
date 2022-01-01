@@ -41,7 +41,7 @@ from evaluation.cocoeval import COCOeval
 from pycocotools import cocoeval
 import six
 from six.moves import range
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow as tf
 
 from evaluation import coco_utils
 from utils import class_utils
@@ -80,10 +80,10 @@ class COCOEvaluator(object):
         if annotation_file:
             if annotation_file.startswith("gs://"):
                 _, local_val_json = tempfile.mkstemp(suffix=".json")
-                tf.gfile.Remove(local_val_json)
+                tf.io.gfile.remove(local_val_json)
 
-                tf.gfile.Copy(annotation_file, local_val_json)
-                atexit.register(tf.gfile.Remove, local_val_json)
+                tf.io.gfile.copy(annotation_file, local_val_json)
+                atexit.register(tf.io.gfile.remove, local_val_json)
             else:
                 local_val_json = annotation_file
             self._coco_gt = coco_utils.COCOWrapper(
@@ -170,7 +170,7 @@ class COCOEvaluator(object):
                     "utf-8"
                 )
 
-        with tf.gfile.Open(file_path, "w") as f:
+        with tf.io.gfile.GFile(file_path, "w") as f:
             json.dump(predictions, f, indent=4)
 
     def evaluate(self):

@@ -26,7 +26,7 @@ from absl import flags
 from absl import logging
 
 from six.moves import range
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow as tf
 
 
 from configs import factory
@@ -230,11 +230,11 @@ def main(argv):
 
         checkpoint_prefix = "model.ckpt-" + FLAGS.predict_checkpoint_step
         checkpoint_path = os.path.join(FLAGS.model_dir, checkpoint_prefix)
-        if not tf.train.checkpoint_exists(checkpoint_path):
+        if not tf.compat.v1.train.checkpoint_exists(checkpoint_path):
             checkpoint_path = os.path.join(
                 FLAGS.model_dir, "best_checkpoints", checkpoint_prefix
             )
-            if not tf.train.checkpoint_exists(checkpoint_path):
+            if not tf.compat.v1.train.checkpoint_exists(checkpoint_path):
                 raise ValueError(
                     "Checkpoint not found: %s/%s" % (FLAGS.model_dir, checkpoint_prefix)
                 )
@@ -247,4 +247,4 @@ def main(argv):
 
 if __name__ == "__main__":
     logging.set_verbosity(logging.INFO)
-    tf.app.run(main)
+    tf.compat.v1.app.run(main)

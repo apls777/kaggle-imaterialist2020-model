@@ -40,7 +40,7 @@ cmd_create() {
         --disk-size-gb=300 \
         --machine-type=n1-standard-8 \
         --name="$NAME" \
-        --tf-version=1.15.5 \
+        --tf-version=2.7.0 \
         --tpu-size=v3-8
 }
 

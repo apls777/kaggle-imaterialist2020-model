@@ -14,7 +14,7 @@
 # ==============================================================================
 """Data loader and input processing."""
 
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow as tf
 
 from dataloader import factory
 from dataloader import mode_keys as ModeKeys
@@ -45,7 +45,7 @@ def transform_image_for_tpu(
     elif transpose_images:
         # Transpose the input images from [N,H,W,C] to [H,W,C,N] since reshape on
         # TPU is expensive.
-        return tf.transpose(batch_images, [1, 2, 3, 0])
+        return tf.transpose(a=batch_images, perm=[1, 2, 3, 0])
     else:
         return batch_images
 

@@ -33,7 +33,7 @@ from absl import logging
 
 import numpy as np
 from PIL import Image
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow as tf
 
 from configs import factory as config_factory
 from dataloader import mode_keys
@@ -83,7 +83,7 @@ def main(unused_argv):
   print(' - Loading the label map...')
   label_map_dict = {}
   if FLAGS.label_map_format == 'csv':
-    with tf.gfile.Open(FLAGS.label_map_file, 'r') as csv_file:
+    with tf.io.gfile.GFile(FLAGS.label_map_file, 'r') as csv_file:
       reader = csv.reader(csv_file, delimiter=':')
       for row in reader:
         if len(row) != 2:
@@ -111,7 +111,7 @@ def main(unused_argv):
   model = model_factory.model_generator(params)
 
   with tf.Graph().as_default():
-    image_input = tf.placeholder(shape=(), dtype=tf.string)
+    image_input = tf.compat.v1.placeholder(shape=(), dtype=tf.string)
     image = tf.io.decode_image(image_input, channels=3)
     image.set_shape([None, None, 3])
 
@@ -139,18 +139,18 @@ def main(unused_argv):
     predictions = outputs
 
     # Create a saver in order to load the pre-trained checkpoint.
-    saver = tf.train.Saver()
+    saver = tf.compat.v1.train.Saver()
 
     image_with_detections_list = []
-    with tf.Session() as sess:
+    with tf.compat.v1.Session() as sess:
       print(' - Loading the checkpoint...')
       saver.restore(sess, FLAGS.checkpoint_path)
 
-      image_files = tf.gfile.Glob(FLAGS.image_file_pattern)
+      image_files = tf.io.gfile.glob(FLAGS.image_file_pattern)
       for i, image_file in enumerate(image_files):
         print(' - Processing image %d...' % i)
 
-        with tf.gfile.GFile(image_file, 'rb') as f:
+        with tf.io.gfile.GFile(image_file, 'rb') as f:
           image_bytes = f.read()
 
         image = Image.open(image_file)
@@ -202,7 +202,7 @@ def main(unused_argv):
   images_str = ' '.join(image_strs)
   html_str += images_str
   html_str += '</html>'
-  with tf.gfile.GFile(FLAGS.output_html, 'w') as f:
+  with tf.io.gfile.GFile(FLAGS.output_html, 'w') as f:
     f.write(html_str)
 
 
@@ -213,4 +213,4 @@ if __name__ == '__main__':
   flags.mark_flag_as_required('image_file_pattern')
   flags.mark_flag_as_required('output_html')
   logging.set_verbosity(logging.INFO)
-  tf.app.run(main)
+  tf.compat.v1.app.run(main)

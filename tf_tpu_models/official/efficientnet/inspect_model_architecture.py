@@ -35,7 +35,7 @@ FLAGS = flags.FLAGS
 
 
 def main(unused_argv):
-  tf.logging.set_verbosity(tf.logging.ERROR)
+  tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
   image_res = FLAGS.image_res
   model_name = FLAGS.model_name
   model_builder_fn = None
@@ -48,25 +48,25 @@ def main(unused_argv):
     raise ValueError(
         'Model must be either efficientnet-b* or efficientnet-edgetpu*')
 
-  with tf.Graph().as_default(), tf.Session() as sess:
-    images = tf.placeholder(
+  with tf.Graph().as_default(), tf.compat.v1.Session() as sess:
+    images = tf.compat.v1.placeholder(
         tf.float32, shape=(1, image_res, image_res, 3), name='input')
     output, _ = model_builder_fn.build_model(
         images, FLAGS.model_name, training=False)
 
-    tf.global_variables_initializer().run()
+    tf.compat.v1.global_variables_initializer().run()
     updates = []
-    for var in tf.trainable_variables():
+    for var in tf.compat.v1.trainable_variables():
       noise = tf.random.normal(shape=var.shape, stddev=0.001)
       updates.append(var.assign_add(noise))
     sess.run(updates)
     converter = tf.lite.TFLiteConverter.from_session(sess, [images], [output])  # pytype: disable=attribute-error
-    converter.inference_type = tf.lite.constants.QUANTIZED_UINT8
+    converter.inference_type = tf.uint8
     converter.quantized_input_stats = {'input': (0, 1.)}
     converter.default_ranges_stats = (-10, 10)
 
   tflite_model = converter.convert()
-  tf.gfile.Open(FLAGS.output_tflite, 'wb').write(tflite_model)
+  tf.io.gfile.GFile(FLAGS.output_tflite, 'wb').write(tflite_model)
 
   print('Model %s, image size %d' % (model_name, image_res))
   print('TfLite model stored at %s' % FLAGS.output_tflite)

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import NewType
 
 import numpy as np
-import tensorflow._api.v2.compat.v1 as tf
+import tensorflow as tf
 import typer
 from configs import factory as config_factory
 from dataloader import mode_keys
@@ -23,7 +23,7 @@ from utils import box_utils, input_utils, mask_utils
 
 from counter import Counter
 
-tf.disable_v2_behavior()
+tf.compat.v1.disable_v2_behavior()
 
 DUMMY_FILENAME = "DUMMY_FILENAME"
 
@@ -68,9 +68,9 @@ def load_and_preprocess_image(path: str, image_size: int) -> Feature:
     dummy_image.set_shape([None, None, 3])
 
     image = tf.cond(
-        tf.math.equal(path, DUMMY_FILENAME),
-        lambda: dummy_image,
-        lambda: load_image(path),
+        pred=tf.math.equal(path, DUMMY_FILENAME),
+        true_fn=lambda: dummy_image,
+        false_fn=lambda: load_image(path),
     )
     # tf.print(path, tf.shape(image))
 

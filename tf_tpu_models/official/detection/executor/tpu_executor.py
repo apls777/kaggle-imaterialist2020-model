@@ -29,7 +29,7 @@ import numpy as np
 import six
 from evaluation.submission import get_metrics
 from six.moves import range
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow as tf
 
 from evaluation import coco_utils
 from evaluation import factory
@@ -41,9 +41,10 @@ def write_summary(logs, summary_writer, current_step):
     """Write out summaries of current training step for the checkpoint."""
     with tf.Graph().as_default():
         summaries = [
-            tf.Summary.Value(tag=tag, simple_value=value) for tag, value in logs.items()
+            tf.compat.v1.Summary.Value(tag=tag, simple_value=value)
+            for tag, value in logs.items()
         ]
-        tf_summary = tf.Summary(value=summaries)
+        tf_summary = tf.compat.v1.Summary(value=summaries)
         summary_writer.add_summary(tf_summary, current_step)
 
 
@@ -78,7 +79,7 @@ class TpuExecutor(object):
                     )
                 )
             tpu_grpc_url = self._tpu_cluster_resolver.get_master()
-            tf.Session.reset(tpu_grpc_url)
+            tf.compat.v1.Session.reset(tpu_grpc_url)
 
             # If the input image is transposed (from NHWC to HWCN), the partition
             # dimensions also need to be transposed the same way.
@@ -100,16 +101,16 @@ class TpuExecutor(object):
             self._tpu_cluster_resolver = None
 
         # Sets up config for TPUEstimator.
-        tpu_config = tf.estimator.tpu.TPUConfig(
+        tpu_config = tf.compat.v1.estimator.tpu.TPUConfig(
             params.train.iterations_per_loop,
             num_cores_per_replica=num_cores_per_replica,
             input_partition_dims=input_partition_dims,
             tpu_job_name=self._tpu_job_name,
-            per_host_input_for_training=tf.estimator.tpu.InputPipelineConfig.PER_HOST_V2,  # pylint: disable=line-too-long
+            per_host_input_for_training=tf.compat.v1.estimator.tpu.InputPipelineConfig.PER_HOST_V2,  # pylint: disable=line-too-long
         )
 
-        run_config = tf.estimator.tpu.RunConfig(
-            session_config=tf.ConfigProto(
+        run_config = tf.compat.v1.estimator.tpu.RunConfig(
+            session_config=tf.compat.v1.ConfigProto(
                 isolate_session_state=params.isolate_session_state
             ),
             cluster=self._tpu_cluster_resolver,
@@ -120,7 +121,7 @@ class TpuExecutor(object):
             keep_checkpoint_max=params.train.checkpoint.keep_checkpoint_max,
             save_checkpoints_secs=params.train.checkpoint.save_checkpoints_secs,
         )
-        self._estimator = tf.estimator.tpu.TPUEstimator(
+        self._estimator = tf.compat.v1.estimator.tpu.TPUEstimator(
             model_fn=model_fn,
             use_tpu=params.use_tpu,
             train_batch_size=params.train.train_batch_size,
@@ -142,7 +143,7 @@ class TpuExecutor(object):
                 self._params.model_dir, "eval_annotation_file.json"
             )
             if self._params.eval.val_json_file:
-                tf.gfile.Copy(
+                tf.io.gfile.copy(
                     self._params.eval.val_json_file, val_json_file, overwrite=True
                 )
             else:
@@ -211,8 +212,8 @@ class TpuExecutor(object):
 
             # Summary writer writes out eval metrics.
             output_dir = os.path.join(self._model_dir, "eval")
-            tf.gfile.MakeDirs(output_dir)
-            summary_writer = tf.summary.FileWriter(output_dir)
+            tf.io.gfile.makedirs(output_dir)
+            summary_writer = tf.compat.v1.summary.FileWriter(output_dir)
             write_summary(metrics, summary_writer, current_step)
             write_summary(losses, summary_writer, current_step)
             summary_writer.close()
@@ -273,5 +274,5 @@ class TpuExecutor(object):
         # dump metrics
         metrics = get_metrics(self._model_dir, current_step)
         metrics_path = os.path.join(output_dir, "eval_metrics.json")
-        with tf.gfile.Open(metrics_path, "w") as f:
+        with tf.io.gfile.GFile(metrics_path, "w") as f:
             json.dump(metrics, f, indent=4)

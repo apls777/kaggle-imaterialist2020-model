@@ -14,7 +14,7 @@
 # ==============================================================================
 """Data parser and processing for Mask R-CNN."""
 
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow as tf
 from absl import logging
 from dataloader import anchor
 from dataloader import mode_keys as ModeKeys
@@ -161,7 +161,7 @@ class Parser(object):
           {'images': image, 'labels': labels}: if mode == ModeKeys.PREDICT
             or ModeKeys.PREDICT_WITH_GT.
         """
-        with tf.name_scope("parser"):
+        with tf.compat.v1.name_scope("parser"):
             data = self._example_decoder.decode(value, self._max_num_instances)
             return self._parse_fn(data)
 
@@ -212,12 +212,12 @@ class Parser(object):
         is_crowds = data["groundtruth_is_crowd"]
         # Skips annotations with `is_crowd` = True.
         if self._skip_crowd_during_training and self._is_training:
-            num_groundtrtuhs = tf.shape(classes)[0]
+            num_groundtrtuhs = tf.shape(input=classes)[0]
             with tf.control_dependencies([num_groundtrtuhs, is_crowds]):
                 indices = tf.cond(
-                    tf.greater(tf.size(is_crowds), 0),
-                    lambda: tf.where(tf.logical_not(is_crowds))[:, 0],
-                    lambda: tf.cast(tf.range(num_groundtrtuhs), tf.int64),
+                    pred=tf.greater(tf.size(input=is_crowds), 0),
+                    true_fn=lambda: tf.compat.v1.where(tf.logical_not(is_crowds))[:, 0],
+                    false_fn=lambda: tf.cast(tf.range(num_groundtrtuhs), tf.int64),
                 )
             classes = tf.gather(classes, indices)
             boxes = tf.gather(boxes, indices)
@@ -250,7 +250,7 @@ class Parser(object):
                 image, boxes, masks, self._autoaugment_policy_name
             )
 
-        image_shape = tf.shape(image)[0:2]
+        image_shape = tf.shape(input=image)[0:2]
 
         # Normalizes image with mean and std pixel values.
         image = input_utils.normalize_image(image)
@@ -299,7 +299,7 @@ class Parser(object):
             cropped_boxes = boxes + tf.tile(tf.expand_dims(offset, axis=0), [1, 2])
             cropped_boxes /= tf.tile(tf.expand_dims(image_scale, axis=0), [1, 2])
             cropped_boxes = box_utils.normalize_boxes(cropped_boxes, image_shape)
-            num_masks = tf.shape(masks)[0]
+            num_masks = tf.shape(input=masks)[0]
             masks = tf.image.crop_and_resize(
                 tf.expand_dims(masks, axis=-1),
                 cropped_boxes,
@@ -422,12 +422,12 @@ class Parser(object):
         is_crowds = data["groundtruth_is_crowd"]
         # Skips annotations with `is_crowd` = True.
         if self._skip_crowd_during_training and self._is_training:
-            num_groundtrtuhs = tf.shape(classes)[0]
+            num_groundtrtuhs = tf.shape(input=classes)[0]
             with tf.control_dependencies([num_groundtrtuhs, is_crowds]):
                 indices = tf.cond(
-                    tf.greater(tf.size(is_crowds), 0),
-                    lambda: tf.where(tf.logical_not(is_crowds))[:, 0],
-                    lambda: tf.cast(tf.range(num_groundtrtuhs), tf.int64),
+                    pred=tf.greater(tf.size(input=is_crowds), 0),
+                    true_fn=lambda: tf.compat.v1.where(tf.logical_not(is_crowds))[:, 0],
+                    false_fn=lambda: tf.cast(tf.range(num_groundtrtuhs), tf.int64),
                 )
             classes = tf.gather(classes, indices)
             boxes = tf.gather(boxes, indices)
@@ -477,7 +477,7 @@ class Parser(object):
 
         # Resizes and crops boxes.
         # Now the coordinates of boxes are w.r.t the scaled image.
-        rescaled_image_shape = tf.shape(image)[:2]
+        rescaled_image_shape = tf.shape(input=image)[:2]
         image_scale = image_info[2, :]
         offset = image_info[3, :]
         boxes = input_utils.resize_and_crop_boxes(
@@ -500,7 +500,7 @@ class Parser(object):
             scaled_mask_size = tf.cast(
                 tf.round(orig_image_shape * image_scale), tf.int32
             )
-            scaled_masks = tf.image.resize_images(
+            scaled_masks = tf.image.resize(
                 masks, scaled_mask_size, method=tf.image.ResizeMethod.BILINEAR
             )
             offset_int = tf.cast(offset, tf.int32)
@@ -542,7 +542,7 @@ class Parser(object):
                     cropped_boxes, orig_image_shape
                 )
 
-            num_masks = tf.shape(masks)[0]
+            num_masks = tf.shape(input=masks)[0]
             masks = tf.image.crop_and_resize(
                 tf.expand_dims(masks, axis=-1),
                 cropped_boxes,
@@ -664,7 +664,7 @@ class Parser(object):
         """
         # Gets original image and its size.
         image = data["image"]
-        image_shape = tf.shape(image)[0:2]
+        image_shape = tf.shape(input=image)[0:2]
 
         # Normalizes image with mean and std pixel values.
         image = input_utils.normalize_image(image)
@@ -700,7 +700,7 @@ class Parser(object):
             "source_id": data["source_id"],
             "height": data["height"],
             "width": data["width"],
-            "num_groundtruths": tf.shape(data["groundtruth_classes"]),
+            "num_groundtruths": tf.shape(input=data["groundtruth_classes"]),
             "boxes": box_utils.denormalize_boxes(
                 data["groundtruth_boxes"], image_shape
             ),
@@ -749,7 +749,7 @@ class Parser(object):
         """
         # Gets original image and its size.
         image = data["image"]
-        image_shape = tf.shape(image)[0:2]
+        image_shape = tf.shape(input=image)[0:2]
 
         # Normalizes image with mean and std pixel values.
         image = input_utils.normalize_image(image)
@@ -793,7 +793,7 @@ class Parser(object):
                 "source_id": data["source_id"],
                 "height": data["height"],
                 "width": data["width"],
-                "num_detections": tf.shape(data["groundtruth_classes"]),
+                "num_detections": tf.shape(input=data["groundtruth_classes"]),
                 "boxes": boxes,
                 "classes": data["groundtruth_classes"],
                 "areas": data["groundtruth_area"],
