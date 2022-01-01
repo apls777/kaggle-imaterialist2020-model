@@ -1735,6 +1735,22 @@ typing-extensions = ">=3.6.6"
 wrapt = ">=1.11.0"
 
 [[package]]
+name = "tensorflow-addons"
+version = "0.15.0"
+description = "TensorFlow Addons."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+typeguard = ">=2.7"
+
+[package.extras]
+tensorflow = ["tensorflow (>=2.5.0,<2.8.0)"]
+tensorflow-cpu = ["tensorflow-cpu (>=2.5.0,<2.8.0)"]
+tensorflow-gpu = ["tensorflow-gpu (>=2.5.0,<2.8.0)"]
+
+[[package]]
 name = "tensorflow-estimator"
 version = "2.7.0"
 description = "TensorFlow Estimator."
@@ -1852,6 +1868,18 @@ description = "a fork of Python 2 and 3 ast modules with type comment support"
 category = "dev"
 optional = false
 python-versions = "*"
+
+[[package]]
+name = "typeguard"
+version = "2.13.3"
+description = "Run-time type checker for Python"
+category = "main"
+optional = false
+python-versions = ">=3.5.3"
+
+[package.extras]
+doc = ["sphinx-rtd-theme", "sphinx-autodoc-typehints (>=1.2.0)"]
+test = ["pytest", "typing-extensions", "mypy"]
 
 [[package]]
 name = "typer"
@@ -1981,7 +2009,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytes
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.7.1,<3.8"
-content-hash = "86cd9b6f9d7dfcaf74752dcee96f2be81d354565689cf3d6f9b44ee1c5a69709"
+content-hash = "6070eb82b500ce8b830217eb87f47b87ba282e9154d3bb7e2b27e216df61dec1"
 
 [metadata.files]
 absl-py = [
@@ -3282,6 +3310,17 @@ tensorflow = [
     {file = "tensorflow-2.7.0-cp39-cp39-manylinux2010_x86_64.whl", hash = "sha256:ae17148d608a280c8d82d18404883367015e36cb1f4e02d34395d70a96912432"},
     {file = "tensorflow-2.7.0-cp39-cp39-win_amd64.whl", hash = "sha256:7c7572de9f80547dcf3bcc2f94cd7d5dc14395d494c3b9d223e7b3e579a6b24f"},
 ]
+tensorflow-addons = [
+    {file = "tensorflow_addons-0.15.0-cp37-cp37m-macosx_10_13_x86_64.whl", hash = "sha256:5491aa5c22872aa6db1be9ae9e2f2317b5811ad4d1f98a26d730403d22f971a0"},
+    {file = "tensorflow_addons-0.15.0-cp37-cp37m-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:be29b4ed0879ba386e17fc2c55ed7b3bacdfc7c82df8f2f8fc15b847cdbd3a3e"},
+    {file = "tensorflow_addons-0.15.0-cp37-cp37m-win_amd64.whl", hash = "sha256:4523e061c77513881ae32ac1e3c4e2e36f84669957970d865fc9bee29d69b659"},
+    {file = "tensorflow_addons-0.15.0-cp38-cp38-macosx_10_13_x86_64.whl", hash = "sha256:7984cb75f38efc311b5b922d4d23b69dbc85236c1aca9dbbff8ea41c404ba09f"},
+    {file = "tensorflow_addons-0.15.0-cp38-cp38-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:d3bb0c3a46c3a6fc7bd40be3bbbda4cd4ea99be815aa97b52b7d6ec33fea1851"},
+    {file = "tensorflow_addons-0.15.0-cp38-cp38-win_amd64.whl", hash = "sha256:90bef4cfa5008a1012ecb41424742d895e5b7b967a3c806f34eccc052f15edc3"},
+    {file = "tensorflow_addons-0.15.0-cp39-cp39-macosx_10_13_x86_64.whl", hash = "sha256:04162a18205ae4319933323cc30366bda4b9e05e4d26097628f87481f191a309"},
+    {file = "tensorflow_addons-0.15.0-cp39-cp39-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:785f3829575a7ffc94ed981aa15213fe4e46900cb42f336fcce1d99fa92174e9"},
+    {file = "tensorflow_addons-0.15.0-cp39-cp39-win_amd64.whl", hash = "sha256:16f5a6847ddf4578bc835dbdf4434c7f887610cd39d3dfabe65ec5dc863c2baa"},
+]
 tensorflow-estimator = [
     {file = "tensorflow_estimator-2.7.0-py2.py3-none-any.whl", hash = "sha256:325b5a224864379242b7b76c6987ca544239be82579d33e68ec7c2bda57abc9d"},
 ]
@@ -3400,6 +3439,10 @@ typed-ast = [
     {file = "typed_ast-1.4.3-cp39-cp39-win32.whl", hash = "sha256:209596a4ec71d990d71d5e0d312ac935d86930e6eecff6ccc7007fe54d703808"},
     {file = "typed_ast-1.4.3-cp39-cp39-win_amd64.whl", hash = "sha256:9c6d1a54552b5330bc657b7ef0eae25d00ba7ffe85d9ea8ae6540d2197a3788c"},
     {file = "typed_ast-1.4.3.tar.gz", hash = "sha256:fb1bbeac803adea29cedd70781399c99138358c26d05fcbd23c13016b7f5ec65"},
+]
+typeguard = [
+    {file = "typeguard-2.13.3-py3-none-any.whl", hash = "sha256:5e3e3be01e887e7eafae5af63d1f36c849aaa94e3a0112097312aabfa16284f1"},
+    {file = "typeguard-2.13.3.tar.gz", hash = "sha256:00edaa8da3a133674796cf5ea87d9f4b4c367d77476e185e80251cc13dfbb8c4"},
 ]
 typer = [
     {file = "typer-0.3.2-py3-none-any.whl", hash = "sha256:ba58b920ce851b12a2d790143009fa00ac1d05b3ff3257061ff69dbdfc3d161b"},
