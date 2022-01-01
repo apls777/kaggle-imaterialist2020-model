@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import NewType
 
 import numpy as np
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow._api.v2.compat.v1 as tf
 import typer
 from configs import factory as config_factory
 from dataloader import mode_keys
@@ -22,6 +22,8 @@ from typing_extensions import TypedDict
 from utils import box_utils, input_utils, mask_utils
 
 from counter import Counter
+
+tf.disable_v2_behavior()
 
 DUMMY_FILENAME = "DUMMY_FILENAME"
 

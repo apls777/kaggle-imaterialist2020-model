@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow._api.v2.compat.v1 as tf
 
 from dataloader import anchor
 from dataloader import mode_keys
