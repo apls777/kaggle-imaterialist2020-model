@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from typing import NamedTuple
+from collections import namedtuple
 import inspect
 import math
 import tensorflow.compat.v1 as tf
@@ -1890,7 +1890,7 @@ def distort_image_with_autoaugment(image, bboxes, augmentation_name):
     policy = available_policies[augmentation_name]()
     # Hparams that will be used for AutoAugment.
     def get_hparams(**kwargs):
-        return NamedTuple("GenericDict", kwargs.keys())(**kwargs)
+        return namedtuple("GenericDict", kwargs.keys())(**kwargs)
 
     augmentation_hparams = get_hparams(
         cutout_max_pad_fraction=0.75,
