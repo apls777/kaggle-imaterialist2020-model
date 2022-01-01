@@ -43,6 +43,8 @@ from hyperparameters import params_dict
 common_tpu_flags.define_common_tpu_flags()
 common_hparams_flags.define_common_hparams_flags()
 
+tf.compat.v1.enable_resource_variables()
+
 
 flags.DEFINE_string(
     "mode", default="train", help="Mode to run: `train`, `eval` or `train_and_eval`."
