@@ -93,24 +93,18 @@ Create TF Records from iMaterialist [*COCO* format annotations](https://github.c
 ```sh
 poetry shell
 
-PYTHONPATH="tf-models:tf-models/research" \
-    python tools/datasets/create_coco_tf_record.py \
-    --logtostderr \
-    --include_masks \
-    --num_shards=50 \
-    --image_dir=$IMAGE_DIR \
-    --object_annotations_file=$COCO_JSON_FILE \
-    --output_file_prefix=$OUTPUT_FILE_PREFIX
+./scripts/create_tf_records.sh \
+    train \
+    $IMAGE_DIR \
+    $COCO_JSON_FILE \
+    $OUTPUT_FILE_PREFIX
 
 # e.g.,
-PYTHONPATH="tf-models:tf-models/research" \
-    python tools/datasets/create_coco_tf_record.py \
-    --logtostderr \
-    --include_masks \
-    --num_shards=50 \
-    --image_dir=~/iMaterialist/raw/train \
-    --object_annotations_file=~/iMaterialist/raw/instances_attributes_train2020.json \
-    --output_file_prefix=gs://yourbucket/tfrecords/train
+./scripts/create_tf_records.sh \
+    train \
+    ~/iMaterialist/raw/train \
+    ~/iMaterialist/raw/instances_attributes_train2020.json \
+    gs://yourbucket/tfrecords/train
 ```
 
 TF Records will be created like `gs://yourbucket/tfrecords/train-00001-of-00050.tfrecord`.
