@@ -8,6 +8,9 @@ This repository is forked from https://github.com/apls777/kaggle-imaterialist202
     - [Setup](#setup)
 - [Train](#train)
 - [Predict](#predict)
+    - [TPU](#tpu)
+    - [CPU/GPU](#cpugpu)
+- [Prediction Schema](#prediction-schema)
 - [Detection Prediction Data Flow](#detection-prediction-data-flow)
 
 <!-- /TOC -->
@@ -140,6 +143,9 @@ If the training fails, delete the training artifacts from GCS. Otherwise, the co
 
 # Predict
 
+
+## TPU
+
 Log in to the VM instance via SSH.
 
 ```sh
@@ -169,6 +175,26 @@ poetry shell
 ```
 
 The TPU should be automatically shut down by `scripts/predict.sh`.
+
+## CPU/GPU
+
+Example:
+
+```
+poetry run kaggle_imaterialist2020_model/cmd/segment.py \
+  --config-file gs://bucket/model/config.yaml \
+  --checkpoint-file gs://bucket/model/model.ckpt-200000 \
+  --image-dir gs://bucket/images \
+  --out /tmp/segmentation.jsonlines
+```
+
+More details:
+
+```
+poetry run kaggle_imaterialist2020_model/cmd/segment.py --help
+```
+
+# Prediction Schema
 
 The prediction results are dumped to `gs://yourbucket/yourdataset/predictions/predictions.json` (JSON Lines).
 Its schema is:

@@ -21,7 +21,7 @@ from pycocotools import mask as mask_api
 from typing_extensions import TypedDict
 from utils import box_utils, input_utils, mask_utils
 
-from counter import Counter
+from kaggle_imaterialist2020_model.counter import Counter
 
 DUMMY_FILENAME = "DUMMY_FILENAME"
 
