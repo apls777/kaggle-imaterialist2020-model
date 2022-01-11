@@ -12,6 +12,7 @@ This repository is forked from https://github.com/apls777/kaggle-imaterialist202
     - [CPU/GPU](#cpugpu)
 - [Prediction Schema](#prediction-schema)
 - [Detection Prediction Data Flow](#detection-prediction-data-flow)
+- [Check accuracy when editing training code](#check-accuracy-when-editing-training-code)
 
 <!-- /TOC -->
 
@@ -242,3 +243,58 @@ You can get the binary mask `numpy.ndarray` for a particular category using [hrs
 The data flow of `tf_tpu_models/official/detection/main.py` is depicted as the following figure.
 
 ![](/detection_main_predict_flow.png)
+
+
+# Check accuracy when editing training code
+
+If you edit the training code ( `tf_tpu_models/official/detection/main.py` ), you must check that the accuracy of a new model doesn't get worse.
+
+```sh
+poetry run python kaggle_imaterialist2020_model/cmd/check.py \
+--checkpoint-path "gs://bucket/model/model.ckpt-20000" \
+--config-file "gs://bucket/model/config.yaml" \
+--out-qual tmp/segment/qual
+```
+
+All expected masks ( `tests/resources/masks/*.npy` ) must be included in the new predictions, if the accuracy doesn't get worse.
+
+You'll get a message like:
+
+```
+tests/resources/masks/top.npy: OK
+tests/resources/masks/coat.npy: OK
+tests/resources/masks/stockings_right.npy: OK
+tests/resources/masks/skirt.npy: OK
+...
+```
+
+On the other hand, you'll get a message like the following, if the accuracy gets worse:
+
+```
+AssertionError: belt.npy mask doesn't exist in the prediction.
+```
+
+You can evaluate the predictions in more detail by seeing the actual and expcted images in the directory `tmp/segment/qual/` given by `--out-qual`.
+
+```
+├── actual_0_leg_warmer.png
+├── actual_10_cardigan.png
+├── actual_11_shorts.png
+├── actual_12_umbrella.png
+├── actual_13_umbrella.png
+├── actual_14_umbrella.png
+├── actual_1_leg_warmer.png
+├── actual_2_skirt.png
+├── actual_3_coat.png
+├── actual_4_watch.png
+├── actual_5_watch.png
+├── actual_6_watch.png
+├── actual_7_vest.png
+├── actual_8_shirt|blouse.png
+├── actual_9_shirt|blouse.png
+├── expected_belt.png
+├── expected_coat.png
+├── expected_skirt.png
+├── expected_stockings_right.png
+└── expected_top.png
+```

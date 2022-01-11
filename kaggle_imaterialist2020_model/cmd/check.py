@@ -128,6 +128,9 @@ def main(
         help="The path to save images for qualitative evaluation.",
     ),
 ) -> None:
+    """Check that editing the training code (tf_tpu_models/official/detection/main.py)
+    doesn't make the accuracy worse.
+    """
     with tempfile.NamedTemporaryFile(suffix=".jsonl") as f:
         segment(
             config_file=config_file,
