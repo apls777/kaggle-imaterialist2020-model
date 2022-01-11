@@ -98,20 +98,6 @@ def crop_and_resize(mask):
     return resized_mask
 
 
-def _partialy_reverse(mask, scale):
-    ys, xs = np.where(mask == 1)
-    top = ys.min()
-    bottom = ys.max()
-    height = int(scale * (bottom - top))
-    left = xs.min()
-    right = xs.max()
-    width = int(scale * (right - left))
-    mask[top : top + height, left : left + width] = (
-        1 - mask[top : top + height, left : left + width]
-    )
-    return mask
-
-
 def main(
     config_file: str = typer.Option(
         ...,
@@ -166,8 +152,6 @@ def main(
             # TODO: Remove mask cropping & resizing after fixing the mask resizing bug
             # https://github.com/hrsma2i/kaggle-imaterialist2020-model/pull/11
             expected = crop_and_resize(expected)
-
-            expected = _partialy_reverse(expected, scale=0.2)
 
             if out_qual:
                 save_mask_image(expected, out_qual / f"expected_{mask_file.stem}.png")
