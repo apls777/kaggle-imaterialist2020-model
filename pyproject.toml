@@ -10,6 +10,7 @@ packages = [
     { include = "modeling", from = "tf_tpu_models/official/detection" },
     { include = "utils", from = "tf_tpu_models/official/detection" },
     { include = "hyperparameters", from = "tf_tpu_models" },
+    { include = "kaggle_imaterialist2020_model" },
 ]
 
 [tool.poetry.dependencies]
