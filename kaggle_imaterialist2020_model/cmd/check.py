@@ -43,7 +43,7 @@ def save_mask_image(mask, out):
 
 
 def join_cateogry(df):
-    # TOOD: Include the following categories into training artifacts
+    # TODO: Include the following categories into training artifacts
     # and dynamicaly load them from the config at this script.
     # pasted from https://github.com/hrsma2i/dataset-iMaterialist/blob/main/raw/classes.txt
     df_c = (
