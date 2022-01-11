@@ -2,23 +2,20 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import NewType, Any
+from typing import Any
 
 import cv2
-from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import typer
 from kaggle_imaterialist2020_model.cmd.segment import main as segment
+from PIL import Image
 from segmentation.transforms import coco_rle_to_mask
 
 resource_dir = Path(__file__).parents[2] / "tests/resources"
 image_dir = resource_dir / "images"
 mask_dir = resource_dir / "masks"
-
-Height = NewType("Height", int)
-Width = NewType("Width", int)
 
 
 def rle_to_mask(rle: dict[str, Any]) -> np.ndarray:
