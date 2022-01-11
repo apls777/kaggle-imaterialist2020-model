@@ -37,7 +37,7 @@ from pycocotools import mask as mask_api
 import six
 from six.moves import range
 from six.moves import zip
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow as tf
 
 from dataloader import tf_example_decoder
 from utils import box_utils
@@ -384,17 +384,17 @@ class COCOGroundtruthGenerator(object):
         decoded_tensors = decoder.decode(example)
 
         image = decoded_tensors["image"]
-        image_size = tf.shape(image)[0:2]
+        image_size = tf.shape(input=image)[0:2]
         boxes = box_utils.denormalize_boxes(
             decoded_tensors["groundtruth_boxes"], image_size
         )
         groundtruths = {
-            "source_id": tf.string_to_number(
+            "source_id": tf.strings.to_number(
                 decoded_tensors["source_id"], out_type=tf.int64
             ),
             "height": decoded_tensors["height"],
             "width": decoded_tensors["width"],
-            "num_detections": tf.shape(decoded_tensors["groundtruth_classes"])[0],
+            "num_detections": tf.shape(input=decoded_tensors["groundtruth_classes"])[0],
             "boxes": boxes,
             "classes": decoded_tensors["groundtruth_classes"],
             "is_crowds": decoded_tensors["groundtruth_is_crowd"],
@@ -429,9 +429,9 @@ class COCOGroundtruthGenerator(object):
     def __call__(self):
         with tf.Graph().as_default():
             dataset = self._build_pipeline()
-            groundtruth = dataset.make_one_shot_iterator().get_next()
+            groundtruth = tf.compat.v1.data.make_one_shot_iterator(dataset).get_next()
 
-            with tf.Session() as sess:
+            with tf.compat.v1.Session() as sess:
                 for _ in range(self._num_examples):
                     groundtruth_result = sess.run(groundtruth)
                     yield groundtruth_result
@@ -460,6 +460,6 @@ def generate_annotation_file(groundtruth_generator, annotation_file):
     gt_dataset = convert_groundtruths_to_coco_dataset(groundtruths)
 
     logging.info("Saving groundtruth annotations to the JSON file...")
-    with tf.gfile.Open(annotation_file, "w") as f:
+    with tf.io.gfile.GFile(annotation_file, "w") as f:
         f.write(json.dumps(gt_dataset))
     logging.info("Done saving the JSON file...")

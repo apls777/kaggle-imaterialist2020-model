@@ -18,7 +18,7 @@ train:
   l2_weight_decay: 0.00004
   train_file_pattern: gs://kaggle-imaterialist2020-data-europe-west4/datasets/imaterialist2020/tfrecords/train-*
   checkpoint:
-    path: gs://kaggle-imaterialist2020-data-europe-west4/models/spinenet-143-fixed/model.ckpt-164150
+    # path: gs://kaggle-imaterialist2020-data-europe-west4/models/spinenet-143-fixed/model.ckpt-164150
     skip_variables_regex: '^(global_step).*$'
     keep_checkpoint_max: 10
     save_checkpoints_secs: 1800

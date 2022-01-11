@@ -38,7 +38,7 @@ from pathlib import Path
 
 import numpy as np
 import PIL.Image
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow as tf
 from absl import app, flags
 from pycocotools import mask
 from research.object_detection.utils import dataset_util, label_map_util
@@ -135,7 +135,7 @@ def create_tf_example(
     image = image.resize((image_width, image_height))
     with tempfile.NamedTemporaryFile("wb", suffix=".jpg") as f:
         image.save(f.name)
-        with tf.gfile.GFile(f.name, "rb") as fid:
+        with tf.io.gfile.GFile(f.name, "rb") as fid:
             encoded_jpg = fid.read()
 
     assert (
@@ -271,7 +271,7 @@ def _pool_create_tf_example(args):
 
 def _load_object_annotations(object_annotations_file):
     """Loads object annotation JSON file."""
-    with tf.gfile.GFile(object_annotations_file, "r") as fid:
+    with tf.io.gfile.GFile(object_annotations_file, "r") as fid:
         obj_annotations = json.load(fid)
 
     try:
@@ -304,7 +304,7 @@ def _load_object_annotations(object_annotations_file):
 
 def _load_caption_annotations(caption_annotations_file):
     """Loads caption annotation JSON file."""
-    with tf.gfile.GFile(caption_annotations_file, "r") as fid:
+    with tf.io.gfile.GFile(caption_annotations_file, "r") as fid:
         caption_annotations = json.load(fid)
 
     img_to_caption_annotation = collections.defaultdict(list)
@@ -326,7 +326,7 @@ def _load_caption_annotations(caption_annotations_file):
 
 
 def _load_images_info(images_info_file):
-    with tf.gfile.GFile(images_info_file, "r") as fid:
+    with tf.io.gfile.GFile(images_info_file, "r") as fid:
         info_dict = json.load(fid)
     return info_dict["images"]
 
@@ -372,9 +372,7 @@ def _create_tf_record_from_coco_annotations(
 
     logging.info("writing to output path: %s", output_path)
     writers = [
-        tf.python_io.TFRecordWriter(
-            output_path + "-%05d-of-%05d.tfrecord" % (i, num_shards)
-        )
+        tf.io.TFRecordWriter(output_path + "-%05d-of-%05d.tfrecord" % (i, num_shards))
         for i in range(num_shards)
     ]
     if images_info_file:
@@ -470,8 +468,8 @@ def main(_):
         )
 
     directory = os.path.dirname(FLAGS.output_file_prefix)
-    if not tf.gfile.IsDirectory(directory):
-        tf.gfile.MakeDirs(directory)
+    if not tf.io.gfile.isdir(directory):
+        tf.io.gfile.makedirs(directory)
 
     _create_tf_record_from_coco_annotations(
         images_info_file,

@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow_core._api.v1.compat.v1 as tf
+import tensorflow._api.v2.compat.v1 as tf
 
 from dataloader import anchor
 from dataloader import mode_keys
@@ -94,7 +94,7 @@ class MaskrcnnModel(base_model.BaseModel):
                 images.get_shape().as_list()[1:3],
             ).multilevel_boxes
 
-            batch_size = tf.shape(images)[0]
+            batch_size = tf.shape(input=images)[0]
             for level in anchor_boxes:
                 anchor_boxes[level] = tf.tile(
                     tf.expand_dims(anchor_boxes[level], 0), [batch_size, 1, 1]
@@ -136,7 +136,7 @@ class MaskrcnnModel(base_model.BaseModel):
                 matched_gt_boxes, rpn_rois, weights=[10.0, 10.0, 5.0, 5.0]
             )
             # If the target is background, the box target is set to all 0s.
-            box_targets = tf.where(
+            box_targets = tf.compat.v1.where(
                 tf.tile(
                     tf.expand_dims(tf.equal(matched_gt_classes, 0), axis=-1), [1, 1, 4]
                 ),
