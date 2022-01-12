@@ -34,8 +34,6 @@ class COCORLE(TypedDict):
 
 
 class Prediction(TypedDict):
-    filename: str
-    pred_source_id: int
     pred_num_detctions: int
     pred_image_info: np.array  # (2, 2)=(orginal|scale, height|width)  # noqa: E501
     pred_detection_boxes: np.array  # (num_detections, 4)
@@ -256,6 +254,8 @@ def encode_mask_fn(x) -> COCORLE:
 
 def convert_predictions_to_coco_annotations(
     prediction: Prediction,
+    image_id: int,
+    filename: str,
     output_image_size: int = None,
     score_threshold=0.05,
 ) -> list[COCOAnnotation]:
@@ -282,7 +282,6 @@ def convert_predictions_to_coco_annotations(
 
     mask_boxes = prediction["pred_detection_boxes"]
 
-    image_id = prediction["pred_source_id"]
     orig_image_size = prediction["pred_image_info"][0]
     # image_info: (2, 2)=(orginal|scale, height|width)  # noqa: E501
 
@@ -318,8 +317,8 @@ def convert_predictions_to_coco_annotations(
     for m, k in enumerate(bbox_indices):
         ann: COCOAnnotation
         ann = {
-            "image_id": int(image_id),
-            "filename": prediction["filename"],
+            "image_id": image_id,
+            "filename": filename,
             "category_id": int(prediction["pred_detection_classes"][k]),
             # Avoid `astype(np.float32)` because
             # it can't be serialized as JSON.
@@ -386,11 +385,10 @@ def main(
         preds = segmentor.segment(imgs)
 
         for fn, p in zip(filenames, preds):
-            p["filename"] = fn
-            p["pred_source_id"] = 0
-
             anns = convert_predictions_to_coco_annotations(
                 p,
+                filename=fn,
+                image_id=0,
                 score_threshold=min_score_threshold,
             )
 
