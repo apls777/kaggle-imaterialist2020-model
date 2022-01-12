@@ -54,13 +54,21 @@ class Counter:
     def elapsed_sec(self) -> float:
         return time.perf_counter() - self.start_at
 
+    @staticmethod
+    def make_sec_readable(sec: int) -> str:
+        ss = int((sec % 60))
+        mm = int((sec / 60) % 60)
+        hh = int(sec // (60 * 60))
+        return f"{hh:02}:{mm:02}:{ss:02}"
+
+    @property
+    def elapsed(self) -> str:
+        return self.make_sec_readable(self.elapsed_sec)
+
     @property
     def eta(self) -> str:
         eta = (self._total - self.processed) / self.throughput
-        ss = int((eta % 60))
-        mm = int((eta / 60) % 60)
-        hh = int(eta // (60 * 60))
-        return f"ETA={hh:02}:{mm:02}:{ss:02}"
+        return f"ETA={self.make_sec_readable(eta)}"
 
     @property
     def progress(self) -> str:

@@ -13,17 +13,18 @@ from configs import factory as config_factory
 from dataloader import mode_keys
 from evaluation.submission import get_new_image_size
 from google.cloud import bigquery
-from google.cloud.bigquery import SchemaField
-from google.cloud.bigquery.enums import SqlTypeNames
 from hyperparameters import params_dict
+from kaggle_imaterialist2020_model.counter import Counter
+from kaggle_imaterialist2020_model.io import Reader, Writer
+from kaggle_imaterialist2020_model.json_logger import get_logger
 from modeling import factory as model_factory
-from PIL import Image
 from pycocotools import mask as mask_api
 from typing_extensions import TypedDict
 from utils import box_utils, input_utils, mask_utils
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
+logger = get_logger(__name__)
 
 # DUMMY_FILENAME = "DUMMY_FILENAME"
 
@@ -263,7 +264,7 @@ class Segmentor:
             export_dir_parent = cache_dir or tmpdir
             children = list(Path(export_dir_parent).glob("*"))
             if children == []:
-                print(f"export saved_model: {export_dir_parent}")
+                logger.info(f"export saved_model: {export_dir_parent}")
                 estimator.export_saved_model(
                     export_dir_base=export_dir_parent,
                     serving_input_receiver_fn=self._serving_input_receiver_fn,
@@ -272,7 +273,7 @@ class Segmentor:
 
             children = list(Path(export_dir_parent).glob("*"))
             export_dir = str(children[0])
-            print(f"load saved_model from {export_dir}")
+            logger.info(f"load saved_model from {export_dir}")
             self.saved_model = tf.saved_model.load(export_dir=export_dir)
 
     def segment(self, imgs: list[np.ndarray]) -> tuple[Prediction, ...]:
@@ -351,7 +352,7 @@ class Segmentor:
         # ]
 
         # Don't do this:
-        #     receiver_tensors = {"images": images, "labels": {"image_info": image_info}}
+        #     receiver_tensors = {"images": images, "labels": {"image_info": image_info}} # noqa: E501
         # because the nesting depth of `features` must be 1
         # when exporting a SavedModel.
         receiver_tensors = {"images": images, "image_info": image_info}
@@ -504,39 +505,7 @@ def insert_bq(
 
     errors = bq_client.insert_rows(result_table, rows_to_insert)  # Make an API request.
     if errors != []:
-        print("Encountered errors while inserting rows: {}".format(errors))
-
-
-def create_table(
-    client: bigquery.Client,
-    dataset_id: str,
-    table_id: str,
-) -> bigquery.Table:
-    dataset_ref = client.dataset(dataset_id)
-    table_ref = dataset_ref.table(table_id)
-
-    schema = [
-        SchemaField("image_id", SqlTypeNames.INTEGER, mode="REQUIRED"),
-        SchemaField("filename", SqlTypeNames.STRING, mode="REQUIRED"),
-        SchemaField("category_id", SqlTypeNames.INTEGER, mode="REQUIRED"),
-        SchemaField("score", SqlTypeNames.FLOAT, mode="REQUIRED"),
-        SchemaField(
-            "segmentation",
-            SqlTypeNames.RECORD,
-            mode="REQUIRED",
-            fields=[
-                SchemaField("size", SqlTypeNames.INTEGER, mode="REPEATED"),
-                SchemaField("counts", SqlTypeNames.STRING, mode="REQUIRED"),
-            ],
-        ),
-        SchemaField("bbox", SqlTypeNames.FLOAT, mode="REPEATED"),
-        SchemaField("mask_area_fraction", SqlTypeNames.FLOAT, mode="REQUIRED"),
-        SchemaField("mask_mean_score", SqlTypeNames.FLOAT, mode="REQUIRED"),
-    ]
-
-    table = bigquery.Table(table_ref, schema=schema)
-    table = client.create_table(table, exists_ok=True)
-    return table
+        logger.info("Encountered errors while inserting rows: {}".format(errors))
 
 
 class Destination(str, Enum):
@@ -564,6 +533,10 @@ def main(
         "or local path (path/to/model.ckpt-1234).",
     ),
     image_dir: str = typer.Option(...),
+    gcs_project: str = typer.Option(
+        None,
+        help="The GCP Project where the bucket exists, which is given as `img_dir`.",
+    ),
     cache_dir: str = typer.Option(
         None, help="a directory path to cache a Saved Model for efficient debugging."
     ),
@@ -577,7 +550,11 @@ def main(
     image_size: int = 640,
     min_score_threshold: float = 0.05,
 ):
-    all_paths = Path(image_dir).glob("*")
+    reader = Reader(image_dir, gcs_project)
+    writer = Writer(out=out)
+
+    logger.info("segment")
+    counter = Counter(total=len(list(reader.list_image_refs())))
 
     segmentor = Segmentor(
         config_file=config_file,
@@ -588,12 +565,23 @@ def main(
         cache_dir=cache_dir,
     )
 
-    for i, paths in enumerate(grouper(batch_size, all_paths)):
-        imgs = [np.array(Image.open(p).convert("RGB")) for p in paths if p is not None]
+    for filenames, imgs in reader.read_image_batches(batch_size):
         preds = segmentor.segment(imgs)
-        print("=========")
-        print(f"batch {i}: ")
-        print([{k: v.shape for k, v in p.items()} for p in preds])
+
+        for fn, p in zip(filenames, preds):
+            p["filename"] = fn
+            p["pred_source_id"] = 0
+
+            anns = convert_predictions_to_coco_annotations(
+                p,
+                score_threshold=min_score_threshold,
+            )
+            assert anns != []
+
+            writer.write(anns)
+            counter.count_success(1)
+            counter.count_processed(1)
+        counter.log_progress(logger.info)
     # if out.startswith("bq://"):
     #     project_id, dataset_id, table_id = out.lstrip("bq://").split(".")
     #     bq_client = bigquery.Client(project=project_id)

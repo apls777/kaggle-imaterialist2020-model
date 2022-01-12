@@ -39,6 +39,7 @@ typing-extensions = "^3.10.0"
 google-cloud-bigquery = "^2.26.0"
 tensorflow = "^2.7.0"
 tensorflow-addons = "^0.15.0"
+python-json-logger = "^2.0.2"
 
 [tool.poetry.dev-dependencies]
 flake8 = "^3.9.0"
