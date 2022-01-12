@@ -113,7 +113,12 @@ class Segmentor:
             logger.info(f"load saved_model from {export_dir}")
             self.saved_model = tf.saved_model.load(export_dir=export_dir)
 
-    def segment(self, imgs: list[np.ndarray]) -> tuple[Prediction, ...]:
+    def segment(
+        self,
+        imgs: list[np.ndarray],
+        filenames: list[str],
+        min_score_threshold: float = 0.05,
+    ) -> tuple[COCOAnnotation, ...]:
         # imgs: [#images * {0, ..., 255}^(H, W, RGB) * #images]
         imgs, num_dummies = self._pad_with_dummy(imgs)
         imgs, image_info = list(zip(*[self._preprocess(img) for img in imgs]))
@@ -125,8 +130,11 @@ class Segmentor:
         preds = {k: v.numpy() for k, v in preds.items()}
         preds = self._split_into_single_examples(preds)
         preds = self._trim_dummy(preds, num_dummies)
+        anns = self._to_coco_annotations(
+            preds, filenames, min_score_threshold=min_score_threshold
+        )
 
-        return preds
+        return tuple(anns)
 
     def _pad_with_dummy(self, imgs: list[np.ndarray]) -> tuple[list[np.ndarray], int]:
         # pad the last batch with dummy images for fixed batch_size
@@ -229,7 +237,7 @@ class Segmentor:
             mode=tf.estimator.ModeKeys.PREDICT, predictions=predictions
         )
 
-    def _split_into_single_examples(self, d: Prediction) -> tuple[Prediction]:
+    def _split_into_single_examples(self, d: Prediction) -> list[Prediction]:
         predictions = []
         for k, b in d.items():
             for i, v in enumerate(b):
@@ -237,12 +245,28 @@ class Segmentor:
                     predictions[i][k] = v
                 except IndexError:
                     predictions.append({k: v})
-        return tuple(predictions)
+        return predictions
 
     def _trim_dummy(
-        self, predictions: tuple[Prediction], num_dummies: int
-    ) -> tuple[Prediction]:
+        self, predictions: list[Prediction], num_dummies: int
+    ) -> list[Prediction]:
         return predictions[: len(predictions) - num_dummies]
+
+    def _to_coco_annotations(
+        self,
+        predictions: list[Prediction],
+        filenames: list[str],
+        min_score_threshold: float = 0.05,
+    ) -> list[COCOAnnotation]:
+        anns = []
+        for fn, pred in zip(filenames, predictions):
+            anns += convert_predictions_to_coco_annotations(
+                pred,
+                filename=fn,
+                image_id=0,
+                score_threshold=min_score_threshold,
+            )
+        return anns
 
 
 def encode_mask_fn(x) -> COCORLE:
@@ -313,26 +337,25 @@ def convert_predictions_to_coco_annotations(
         (predicted_masks * mask_masks).sum(axis=-1).sum(axis=-1) / mask_areas
     ).tolist()
 
-    coco_annotations: list[COCOAnnotation] = []
+    anns: list[COCOAnnotation] = []
     for m, k in enumerate(bbox_indices):
-        ann: COCOAnnotation
-        ann = {
-            "image_id": image_id,
-            "filename": filename,
-            "category_id": int(prediction["pred_detection_classes"][k]),
+        ann = COCOAnnotation(
+            image_id=image_id,
+            filename=filename,
+            category_id=int(prediction["pred_detection_classes"][k]),
             # Avoid `astype(np.float32)` because
             # it can't be serialized as JSON.
-            "bbox": tuple(
+            bbox=tuple(
                 float(x) for x in prediction["pred_detection_boxes"][k] / eval_scale
             ),
-            "mask_area_fraction": float(mask_area_fractions[m]),
-            "score": float(prediction["pred_detection_scores"][k]),
-            "segmentation": encoded_masks[m],
-            "mask_mean_score": mask_mean_scores[m],
-        }
-        coco_annotations.append(ann)
+            mask_area_fraction=float(mask_area_fractions[m]),
+            score=float(prediction["pred_detection_scores"][k]),
+            segmentation=encoded_masks[m],
+            mask_mean_score=mask_mean_scores[m],
+        )
+        anns.append(ann)
 
-    return coco_annotations
+    return anns
 
 
 def main(
@@ -382,19 +405,15 @@ def main(
     )
 
     for filenames, imgs in reader.read_image_batches(batch_size):
-        preds = segmentor.segment(imgs)
+        anns = segmentor.segment(
+            imgs,
+            filenames,
+            min_score_threshold=min_score_threshold,
+        )
 
-        for fn, p in zip(filenames, preds):
-            anns = convert_predictions_to_coco_annotations(
-                p,
-                filename=fn,
-                image_id=0,
-                score_threshold=min_score_threshold,
-            )
-
-            writer.write(anns)
-            counter.count_success(1)
-            counter.count_processed(1)
+        writer.write(anns)
+        counter.count_success(len(imgs))
+        counter.count_processed(len(imgs))
         counter.log_progress(logger.info)
 
 
