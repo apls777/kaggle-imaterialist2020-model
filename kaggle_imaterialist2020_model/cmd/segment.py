@@ -42,9 +42,6 @@ class Prediction(TypedDict):
     pred_detection_masks: np.array  # (num_detections, mask_height, mask_width)
 
 
-# TODO: 接頭辞の Bbox を取るために、
-# COCOAnnotation や convert_pred... を別ファイルに移す。
-# Bbox を付けてる理由は、 COCORLE の Width, Height と衝突するから。
 BboxLeft = NewType("BboxLeft", float)
 BboxTop = NewType("BboxTop", float)
 BboxWidth = NewType("BboxWidth", float)
