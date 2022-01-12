@@ -47,8 +47,9 @@ class Segmentor:
             model_fn=self._model_fn,
         )
 
-        # TODO: write why not to use Estimator.predict()
-        # because it is not able to download images from GCS
+        # Use SavedModel instead of Estimator.predcit()
+        # because it is difficult to download images from GCS
+        # when executing these codes on Vertex Pipelines.
 
         with tempfile.TemporaryDirectory() as tmpdir:
             export_dir_parent = cache_dir or tmpdir
