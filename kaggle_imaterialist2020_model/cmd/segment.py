@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import tempfile
-from enum import Enum
-from itertools import zip_longest
 from pathlib import Path
 from typing import NewType
 
@@ -12,7 +10,6 @@ import typer
 from configs import factory as config_factory
 from dataloader import mode_keys
 from evaluation.submission import get_new_image_size
-from google.cloud import bigquery
 from hyperparameters import params_dict
 from kaggle_imaterialist2020_model.counter import Counter
 from kaggle_imaterialist2020_model.io import Reader, Writer
@@ -25,164 +22,6 @@ from utils import box_utils, input_utils, mask_utils
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 logger = get_logger(__name__)
-
-# DUMMY_FILENAME = "DUMMY_FILENAME"
-
-
-# def load_image(path: str) -> tf.Tensor:
-#     image = tf.io.read_file(path)
-#     image = tf.io.decode_image(image, channels=3)
-#     image.set_shape([None, None, 3])
-#     return image
-
-
-# class Label(TypedDict):
-#     image_info: tf.Tensor  # (2, 2)=(original|scale, height, width)
-
-
-# class Feature(TypedDict):
-#     images: tf.Tensor  # (height, width, RGB=3)
-#     labels: Label
-
-
-# class Preprocess:
-#     def __init__(self, resize_shape: tuple[int, int]) -> None:
-#         self.resize_shape = resize_shape
-
-#     def __call__(self, image: tf.Tensor) -> Feature:
-#         image = input_utils.normalize_image(image)
-#         image, image_info = input_utils.resize_and_crop_image(
-#             image,
-#             self.resize_shape,
-#             self.resize_shape,
-#             aug_scale_min=1.0,
-#             aug_scale_max=1.0,
-#         )
-#         image.set_shape([self.resize_shape[0], self.resize_shape[1], 3])
-
-#         feature: Feature = {"images": image, "image_info": image_info}
-#         return feature
-
-
-# def load_and_preprocess_image(path: str, image_size: int) -> Feature:
-#     """
-#     c.f.,
-#         tf_tpu_models/official/detection/main.py @ FLAGS.mode == "predict"
-#         -> tf_tpu_models/official/detection/dataloader/input_reader.InputFn._parser_fn
-#         -> dataloader.maskrcnn_parser.Parser._parse_predict_data
-#             (parse loaded TF Record data to image and labels)
-
-#     Parameters
-#     ----------
-#     path : str
-#         image file path or GCS URI.
-#     image_size : int
-#         the image will be resized to (image_size, image_size, 3)
-
-#     Returns
-#     -------
-#     Feature
-#     """
-#     # pad the last batch with dummy images to fix batch_size
-#     dummy_image = tf.zeros([image_size, image_size, 3], dtype=tf.uint8)
-#     dummy_image.set_shape([None, None, 3])
-
-#     image = tf.cond(
-#         pred=tf.math.equal(path, DUMMY_FILENAME),
-#         true_fn=lambda: dummy_image,
-#         false_fn=lambda: load_image(path),
-#     )
-#     # tf.print(path, tf.shape(image))
-
-#     feature = Preprocess(resize_shape=image_size)(image)
-
-#     return feature
-
-
-# class InputFn:
-#     def __init__(self, filenames: list[str], batch_size: int, image_size: int):
-#         self.filenames = filenames
-#         self.batch_size = batch_size
-#         self.image_size = image_size
-
-#     def __call__(self):
-#         # pad the last batch with dummy images to fix batch_size
-#         self.filenames += [
-#             DUMMY_FILENAME for _ in range(len(self.filenames) % self.batch_size)
-#         ]
-#         dataset = tf.data.Dataset.from_tensor_slices(self.filenames)
-#         dataset = dataset.map(
-#             lambda p: load_and_preprocess_image(p, image_size=self.image_size),
-#             num_parallel_calls=tf.data.experimental.AUTOTUNE,
-#         )
-
-#         # The last smaller batch is not actually dropped
-#         # because it is padded with dummy images.
-#         dataset = dataset.batch(self.batch_size, drop_remainder=True)
-#         dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
-#         return dataset
-
-
-# class ModelFn:
-#     def __init__(self, params):
-#         self._model = model_factory.model_generator(params)
-
-#     def __call__(self, features, labels, mode, params) -> tf.estimator.EstimatorSpec:
-#         """Returns a EstimatorSpec for prediction.
-
-#         c.f.,
-#             tf_tpu_models/official/detection/main.py @ model_fn = model_builder.ModelFn(params)  # noqa: E501
-#             > tf_tpu_models/official/detection/modeling/model_builder.ModelFn
-#             > tf_tpu_models/official/detection/modeling/base_model.BaseModel.predict
-
-#         Args:
-#         features: a dict of Tensors including the input images and other label
-#             tensors used for prediction.
-
-#         Returns:
-#         a EstimatorSpec object used for prediction.
-#         """
-#         # Include `labels` into `features`
-#         # because only `features` passed to this function
-#         # in Estimator.predict.
-#         images = features["images"]
-#         # images: (height, widht, RGB=3)
-#         labels = {"image_info": features["image_info"]}
-
-#         outputs = self._model.build_outputs(images, labels, mode=mode_keys.PREDICT)
-
-#         predictions = self._model.build_predictions(outputs, labels)
-
-#         return tf.estimator.EstimatorSpec(
-#             mode=tf.estimator.ModeKeys.PREDICT, predictions=predictions
-#         )
-
-
-# class ServingInputReceiverFn:
-#     def __init__(self, batch_size: int, resize_shape: tuple[int, int]):
-#         self.batch_size = batch_size
-#         self.resize_shape = resize_shape
-
-#     def __call__(self) -> tf.estimator.export.ServingInputReceiver:
-#         images = tf.compat.v1.placeholder(
-#             dtype=tf.float32, shape=[self.batch_size, None, None, 3], name="images"
-#         )
-#         receiver_tensors = {"images": images}
-
-#         features = tf.map_fn(
-#             Preprocess(resize_shape=self.resize_shape),
-#             images,
-#             dtype={
-#                 "images": tf.float32,
-#                 # "labels": {"image_info": tf.float32},
-#                 "image_info": tf.float32,
-#             },
-#         )
-
-#         return tf.estimator.export.ServingInputReceiver(
-#             features=features, receiver_tensors=receiver_tensors
-#         )
-
 
 Height = NewType("Height", int)
 Width = NewType("Width", int)
@@ -497,28 +336,6 @@ def convert_predictions_to_coco_annotations(
     return coco_annotations
 
 
-def insert_bq(
-    bq_client: bigquery.Client,
-    result_table: bigquery.Table | bigquery.TableReference | str,
-    rows_to_insert: list[COCOAnnotation],
-) -> None:
-
-    errors = bq_client.insert_rows(result_table, rows_to_insert)  # Make an API request.
-    if errors != []:
-        logger.info("Encountered errors while inserting rows: {}".format(errors))
-
-
-class Destination(str, Enum):
-    BQ = "bq"
-    LOCAL = "local"
-
-
-def grouper(n, iterable, fillvalue=None):
-    "grouper(3, 'ABCDEFG', 'x') --> ABC DEF Gxx"
-    args = [iter(iterable)] * n
-    return zip_longest(fillvalue=fillvalue, *args)
-
-
 def main(
     config_file: str = typer.Option(
         ...,
@@ -576,65 +393,11 @@ def main(
                 p,
                 score_threshold=min_score_threshold,
             )
-            assert anns != []
 
             writer.write(anns)
             counter.count_success(1)
             counter.count_processed(1)
         counter.log_progress(logger.info)
-    # if out.startswith("bq://"):
-    #     project_id, dataset_id, table_id = out.lstrip("bq://").split(".")
-    #     bq_client = bigquery.Client(project=project_id)
-    #     table = create_table(client=bq_client, dataset_id=dataset_id, table_id=table_id)
-    #     dst = Destination.BQ
-    # else:
-    #     out_json = Path(out)
-    #     out_json.parent.mkdir(exist_ok=True, parents=True)
-    #     out_file = out_json.open("w")
-    #     dst = Destination.LOCAL
-
-    # image_files_pattern = f"{image_dir.rstrip('/')}/*"
-    # image_files: list[str] = tf.io.gfile.glob(image_files_pattern)
-
-    # predictor = estimator.predict(
-    #     input_fn=InputFn(
-    #         filenames=image_files,
-    #         batch_size=batch_size,
-    #         image_size=image_size,
-    #     ),
-    #     checkpoint_path=checkpoint_path,
-    #     yield_single_examples=True,
-    # )
-
-    # counter = Counter(total=len(image_files))
-    # prediction: Prediction
-    # for source_id, prediction in enumerate(predictor):
-    #     filename = os.path.basename(image_files[source_id])
-
-    #     if filename != DUMMY_FILENAME:
-    #         prediction["filename"] = os.path.basename(image_files[source_id])
-    #         # Add "pred_source_id" because `labels` doesn't have ["groundtruth"]["source_id"]  # noqa: E501
-    #         prediction["pred_source_id"] = source_id
-
-    #         coco_annotations = convert_predictions_to_coco_annotations(
-    #             prediction=prediction,
-    #             # output_image_size=1024,
-    #             score_threshold=min_score_threshold,
-    #         )
-
-    #         if dst == Destination.BQ:
-    #             insert_bq(bq_client, table, coco_annotations)
-    #         elif dst == Destination.LOCAL:
-    #             out_file.write(
-    #                 "\n".join([json.dumps(a) for a in coco_annotations]) + "\n"
-    #             )
-
-    #         counter.count_success(1)
-    #         counter.count_processed(1)
-    #         counter.log_progress()
-
-    # if dst == Destination.LOCAL:
-    #     out_file.close()
 
 
 if __name__ == "__main__":
