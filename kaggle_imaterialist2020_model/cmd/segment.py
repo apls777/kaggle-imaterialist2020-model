@@ -25,7 +25,12 @@ def main(
         "Choose from GCS URI (gs://bucket/models/foo/model.ckpt-1234) "
         "or local path (path/to/model.ckpt-1234).",
     ),
-    image_dir: str = typer.Option(...),
+    image_dir: str = typer.Option(
+        ...,
+        help="The path where there are images to segment. "
+        "Choose from GCS URI (gs://bucket/images) "
+        "or local path (path/to/images).",
+    ),
     gcs_project: str = typer.Option(
         None,
         help="The GCP Project where the bucket exists, which is given as `img_dir`.",
